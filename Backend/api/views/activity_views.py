@@ -92,6 +92,6 @@ class ActivitySetTagsView(APIView):
         serializer = ActivityTagSerializer(data = request.data)
         serializer.is_valid(raise_exception = True)
 
-        activity.tags.set(*serializer.validated_data['tags'])
+        activity.tags.set(serializer.validated_data['tags'])
 
         return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
