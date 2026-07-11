@@ -2,6 +2,7 @@ from django.urls import path
 from .views import activity_views, tag_views
 
 # TODO: Edit endpoints so you have to specify GET, POST, PUT, DELETE 
+# TODO: Verify database connectivity
 urlpatterns = [
     # Activities
         # GET: List activities
