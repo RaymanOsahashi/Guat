@@ -79,7 +79,7 @@ class ActivityListByTag(generics.ListAPIView):
         return queryset
 
 # PATCH: Add tags to activity
-class ActivityAddTagsView(APIView):
+class ActivitySetTagsView(APIView):
     """
     PATCH /activities/<id>/tags/
     Body: {"tags": [1, 2, 3]}   ← tag IDs
@@ -92,6 +92,6 @@ class ActivityAddTagsView(APIView):
         serializer = ActivityTagSerializer(data = request.data)
         serializer.is_valid(raise_exception = True)
 
-        activity.tags.add(*serializer.validated_data['tags'])
+        activity.tags.set(*serializer.validated_data['tags'])
 
         return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)

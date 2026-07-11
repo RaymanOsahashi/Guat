@@ -8,8 +8,8 @@ urlpatterns = [
         path("activity/", activity_views.ActivityListCreate.as_view(), name="activity-list-create"),
         # GET: List activities by tag
         path("activity/by-tags/", activity_views.ActivityListByTag.as_view(), name = "activities-by-tag"),
-        # PATCH: Add tags to activities
-        path('activity/<int:pk>/tags/', activity_views.ActivityAddTagsView.as_view(), name='activity-add-tags'),
+        # PATCH: Set tags to activities
+        path('activity/<int:pk>/tags/', activity_views.ActivitySetTagsView.as_view(), name='activity-set-tags'),
         # GET: Get activities by id
         # PUT: Replace activities by id
         # PATCH: Edit activities by id
