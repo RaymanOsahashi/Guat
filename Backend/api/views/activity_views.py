@@ -36,44 +36,56 @@ class ActivityList(APIView):
 
 # GET: List activities by tags
 class ActivityListByTag(generics.ListAPIView):
+    serializer_class = ActivitySerializer
+
     """
-    GET /activity/by-tags/?tags=outdoor,free           → matches ANY tag (default)
-    GET /activity/by-tags/?tags=outdoor,free&match=all → matches ALL tags
+    GET /activity/by-tags/?tags=outdoor,free                     → matches ANY tag (default)
+    GET /activity/by-tags/?tags=outdoor,free&match=all           → matches ALL tags
+    GET /activity/by-tags/?tags=outdoor,free&exclude=low-energy → matches ANY tag and excludes tags
 
     Returns the activities with the specified tags
     """
 
-    serializer_class = ActivitySerializer
-
     def get_queryset(self):
+        # Get params
         tags_param = self.request.query_params.get('tags')
-        if not tags_param:
-            raise ParseError("Query parameter 'tags' is required, e.g. ?tags=outdoor,high-energy")
+        exclude_param = self.request.query_params.get('exclude')
 
-        tag_slugs = [t.strip() for t in tags_param.split(',') if t.strip()]
+        # Must have either tags or exclude params
+        if not (tags_param or exclude_param):
+            raise ParseError("Query parameter 'tags' or 'exclude' is required")
+
+        # Parse params
+        tag_slugs = [t.strip() for t in tags_param.split(',') if t.strip()] if tags_param else []
+        exclude_slugs = [e.strip() for e in exclude_param.split(',') if e.strip()] if exclude_param else []
         match_mode = self.request.query_params.get('match', 'any')
 
         if match_mode == 'all':
             # Activity must have ALL specified tags
             queryset = Activity.objects.all()
             for slug in tag_slugs:
-                queryset = queryset.filter(tags__slug=slug)
+                queryset = queryset.filter(tags__slug = slug)
             queryset = queryset.distinct()
         else:
             # Activity must have AT LEAST ONE of the specified tags (default)
             queryset = Activity.objects.filter(tags__slug__in=tag_slugs).distinct()
+        
+        if exclude_slugs:
+            # Activity must not have any excluded tags
+            queryset = queryset.exclude(tags__slug__in = exclude_slugs)
 
         return queryset
-# PUT: Add tags to activity
+
+# PATCH: Add tags to activity
 class ActivityAddTagsView(APIView):
     """
-    POST /activities/<id>/tags/
+    PATCH /activities/<id>/tags/
     Body: {"tags": [1, 2, 3]}   ← tag IDs
 
     Adds the given tags to the activity, keeping any it already has.
     """
 
-    def post(self, request, pk):
+    def patch(self, request, pk):
         activity = get_object_or_404(Activity, pk = pk)
         serializer = ActivityTagSerializer(data = request.data)
         serializer.is_valid(raise_exception = True)
