@@ -19,6 +19,7 @@ class ActivityRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
 #==================================================
 
 # GET: List activities
+""""
 class ActivityList(APIView):
     def get(self, request, format = None):
         name = request.query_params.get("name", "")
@@ -33,6 +34,7 @@ class ActivityList(APIView):
         
         serializer = ActivitySerializer(activities, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
+"""
 
 # GET: List activities by tags
 class ActivityListByTag(generics.ListAPIView):
