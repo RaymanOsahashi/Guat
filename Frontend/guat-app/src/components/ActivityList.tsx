@@ -1,17 +1,11 @@
 // src/components/ActivityList.tsx
-//
-// Fetches every Activity from the backend and renders one row per activity.
-//
-// I don't know your Activity model's actual fields, so this assumes a
-// common shape (id, name, date, description). Update the `Activity`
-// interface and the <td> cells below to match your real Django model/
-// serializer fields, and update `ACTIVITY_ENDPOINT` if your route isn't /activities.
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPatch, ApiError } from "../api/apiClient";
 import HeaderTagList from "./HeaderTagList";
 
 const ACTIVITY_ENDPOINT = "/activity/";
+const TAG_ENDPOINT = "/tag/";
 
 interface Tag {
   id: number;
@@ -30,7 +24,9 @@ interface Activity {
   starred: boolean;
 }
 
-type EditableFields = Pick<Activity, "name" | "description" | "description_spanish">;
+type EditableFields = Pick<Activity, "name" | "description" | "description_spanish"> & {
+  tags: Tag[];
+};
 
 export default function ActivityList() {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -43,9 +39,12 @@ export default function ActivityList() {
     name: "",
     description: "",
     description_spanish: "",
+    tags: [],
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [allTags, setAllTags] = useState<Tag[]>([]);
 
   function toggleExpanded(id: number) {
     setExpandedIds((prev) => {
@@ -67,6 +66,7 @@ export default function ActivityList() {
       name: activity.name,
       description: activity.description,
       description_spanish: activity.description_spanish,
+      tags: activity.tags,
     });
   }
 
@@ -75,12 +75,28 @@ export default function ActivityList() {
     setSaveError(null);
   }
 
+  function toggleEditTag(tag: Tag) {
+    setEditForm((f) => {
+      const has = f.tags.some((t) => t.id === tag.id);
+      return {
+        ...f,
+        tags: has ? f.tags.filter((t) => t.id !== tag.id) : [...f.tags, tag],
+      };
+    });
+  }
+
   async function saveEdit(id: number) {
     setSaving(true);
     setSaveError(null);
     try {
-      const updated = await apiPatch<Activity>(`${ACTIVITY_ENDPOINT}${id}/`, editForm);
-      setActivities((prev) => prev.map((a) => (a.id === id ? { ...a, ...updated } : a)));
+      const { tags, ...fields } = editForm;
+      const [updated] = await Promise.all([
+        apiPatch<Activity>(`${ACTIVITY_ENDPOINT}${id}/`, fields),
+        apiPatch(`${ACTIVITY_ENDPOINT}${id}/tags/`, { tags: tags.map((t) => t.id) }),
+      ]);
+      setActivities((prev) =>
+        prev.map((a) => (a.id === id ? { ...a, ...updated, tags } : a))
+      );
       setEditingId(null);
     } catch (err) {
       setSaveError(
@@ -119,163 +135,193 @@ export default function ActivityList() {
     };
   }, []);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    apiGet<Tag[]>(TAG_ENDPOINT)
+      .then((data) => {
+        if (!cancelled) setAllTags(data);
+      })
+      .catch(() => {
+        // Non-fatal: tag picker just stays empty if this fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   if (loading) return <p style={styles.message}>Loading activities…</p>;
   if (error) return <p style={{ ...styles.message, color: "#c0392b" }}>{error}</p>;
 
   return (
-  <div style={styles.container}>
-    <h2 style={styles.heading}>Activities</h2>
+    <div style={styles.container}>
+      <h2 style={styles.heading}>Activities</h2>
 
-    {activities.length === 0 ? (
-      <p style={styles.message}>No activities found.</p>
-    ) : (
-      <div style={styles.list}>
-        {activities.map((activity) => {
-          const isExpanded = expandedIds.has(activity.id);
-          const isEditing = editingId === activity.id;
+      {activities.length === 0 ? (
+        <p style={styles.message}>No activities found.</p>
+      ) : (
+        <div style={styles.list}>
+          {activities.map((activity) => {
+            const isExpanded = expandedIds.has(activity.id);
+            const isEditing = editingId === activity.id;
 
-          return (
-            <div
-              key={activity.id}
-              style={{ ...styles.card, backgroundColor: DEFAULT_CARD_BG }}
-            >
-              <div style={styles.cardHeader} onClick={() => toggleExpanded(activity.id)}>
-                <span style={styles.cardName}>{activity.name}</span>
-
-                <HeaderTagList tags={activity.tags} />
-
-                <span
+            return (
+              <div
+                key={activity.id}
+                style={{ ...styles.card, backgroundColor: DEFAULT_CARD_BG }}
+              >
+                <div
                   style={{
-                    display: "inline-block",
-                    transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
-                    transition: "transform 0.15s ease",
-                    justifySelf: "end",
+                    ...styles.cardHeader,
+                    alignItems: isExpanded ? "flex-start" : "center",
                   }}
+                  onClick={() => toggleExpanded(activity.id)}
                 >
-                  ▶
-                </span>
-              </div>
-
-              {isExpanded && (
-                <div style={styles.cardDetail}>
-                  {isEditing ? (
-                    <div style={styles.editForm} onClick={(e) => e.stopPropagation()}>
-                      <label style={styles.fieldLabel}>
-                        Name
-                        <input
-                          style={styles.textInput}
-                          value={editForm.name}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, name: e.target.value }))
-                          }
-                        />
-                      </label>
-
-                      <label style={styles.fieldLabel}>
-                        Description
-                        <textarea
-                          style={styles.textArea}
-                          value={editForm.description}
-                          onChange={(e) =>
-                            setEditForm((f) => ({ ...f, description: e.target.value }))
-                          }
-                        />
-                      </label>
-
-                      <label style={styles.fieldLabel}>
-                        Description (Spanish)
-                        <textarea
-                          style={styles.textArea}
-                          value={editForm.description_spanish}
-                          onChange={(e) =>
-                            setEditForm((f) => ({
-                              ...f,
-                              description_spanish: e.target.value,
-                            }))
-                          }
-                        />
-                      </label>
-
-                      {saveError && (
-                        <p style={{ ...styles.message, color: "#e57373" }}>{saveError}</p>
-                      )}
-
-                      <div style={styles.editActions}>
-                        <button
-                          style={styles.saveButton}
-                          onClick={() => saveEdit(activity.id)}
-                          disabled={saving}
-                        >
-                          {saving ? "Saving…" : "Save"}
-                        </button>
-                        <button
-                          style={styles.cancelButton}
-                          onClick={cancelEdit}
-                          disabled={saving}
-                        >
-                          Cancel
-                        </button>
-                      </div>
+                  <span style={styles.cardName}>{activity.name}</span>
+                  {isExpanded ? (
+                    <div style={styles.tagList}>
+                      {activity.tags.map((tag) => (
+                        <span key={tag.id} style={tagStyle(tag.color)}>
+                          {tag.name}
+                        </span>
+                      ))}
                     </div>
                   ) : (
-                    <>
-                      <div style={styles.detailNameTags}>
-                        <div style={styles.detailRow}>
-                          <span style={styles.detailLabel}>Name</span>
-                          <span>{activity.name}</span>
-                        </div>
+                    <HeaderTagList tags={activity.tags} />
+                  )}
+                  <span
+                    style={{
+                      display: "inline-block",
+                      transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
+                      transition: "transform 0.15s ease",
+                      justifySelf: "end",
+                    }}
+                  >
+                    ▶
+                  </span>
+                </div>
 
-                        <div style={styles.detailRow}>
-                          <span style={styles.detailLabel}>Tags</span>
-                          <div style={styles.tagList}>
-                            {activity.tags.length === 0 ? (
-                              <span style={styles.detailMuted}>No tags</span>
-                            ) : (
-                              activity.tags.map((tag) => (
-                                <span key={tag.id} style={tagStyle(tag.color)}>
+                {isExpanded && (
+                  <div style={styles.cardDetail}>
+                    {isEditing ? (
+                      <div style={styles.editForm} onClick={(e) => e.stopPropagation()}>
+                        <label style={styles.fieldLabel}>
+                          Name
+                          <input
+                            style={styles.textInput}
+                            value={editForm.name}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, name: e.target.value }))
+                            }
+                          />
+                        </label>
+
+                        <label style={styles.fieldLabel}>
+                          Description
+                          <textarea
+                            style={styles.textArea}
+                            value={editForm.description}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, description: e.target.value }))
+                            }
+                          />
+                        </label>
+
+                        <label style={styles.fieldLabel}>
+                          Description (Spanish)
+                          <textarea
+                            style={styles.textArea}
+                            value={editForm.description_spanish}
+                            onChange={(e) =>
+                              setEditForm((f) => ({
+                                ...f,
+                                description_spanish: e.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+
+                        <label style={styles.fieldLabel}>
+                          Tags
+                          <div style={styles.tagPicker}>
+                            {allTags.map((tag) => {
+                              const selected = editForm.tags.some((t) => t.id === tag.id);
+                              return (
+                                <span
+                                  key={tag.id}
+                                  onClick={() => toggleEditTag(tag)}
+                                  style={
+                                    selected
+                                      ? tagOptionSelectedStyle(tag.color)
+                                      : tagOptionStyle(tag.color)
+                                  }
+                                >
                                   {tag.name}
                                 </span>
-                              ))
-                            )}
+                              );
+                            })}
                           </div>
+                        </label>
+
+                        {saveError && (
+                          <p style={{ ...styles.message, color: "#e57373" }}>{saveError}</p>
+                        )}
+
+                        <div style={styles.editActions}>
+                          <button
+                            style={styles.saveButton}
+                            onClick={() => saveEdit(activity.id)}
+                            disabled={saving}
+                          >
+                            {saving ? "Saving…" : "Save"}
+                          </button>
+                          <button
+                            style={styles.cancelButton}
+                            onClick={cancelEdit}
+                            disabled={saving}
+                          >
+                            Cancel
+                          </button>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        <div style={styles.detailRow}>
+                          <span style={styles.detailLabel}>Description</span>
+                          <p style={styles.detailText}>
+                            {activity.description || (
+                              <span style={styles.detailMuted}>—</span>
+                            )}
+                          </p>
+                        </div>
 
-                      <div style={styles.detailRow}>
-                        <span style={styles.detailLabel}>Description</span>
-                        <p style={styles.detailText}>
-                          {activity.description || (
-                            <span style={styles.detailMuted}>—</span>
-                          )}
-                        </p>
-                      </div>
+                        <div style={styles.detailRow}>
+                          <span style={styles.detailLabel}>Description (Spanish)</span>
+                          <p style={styles.detailText}>
+                            {activity.description_spanish || (
+                              <span style={styles.detailMuted}>—</span>
+                            )}
+                          </p>
+                        </div>
 
-                      <div style={styles.detailRow}>
-                        <span style={styles.detailLabel}>Description (Spanish)</span>
-                        <p style={styles.detailText}>
-                          {activity.description_spanish || (
-                            <span style={styles.detailMuted}>—</span>
-                          )}
-                        </p>
-                      </div>
-
-                      <button
-                        style={styles.editButton}
-                        onClick={() => startEdit(activity)}
-                      >
-                        Edit
-                      </button>
-                    </>
-                  )}
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-    )}
-  </div>
-);
+                        <button
+                          style={styles.editButton}
+                          onClick={() => startEdit(activity)}
+                        >
+                          Edit
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 const DEFAULT_CARD_BG = "#2d2e33";
@@ -293,11 +339,33 @@ function tagStyle(color: string): React.CSSProperties {
   };
 }
 
+function tagOptionStyle(color: string): React.CSSProperties {
+  return {
+    ...tagStyle(color),
+    cursor: "pointer",
+    opacity: 0.55,
+    textTransform: "none",
+    letterSpacing: "normal",
+  };
+}
+
+function tagOptionSelectedStyle(color: string): React.CSSProperties {
+  return {
+    ...tagStyle(color),
+    cursor: "pointer",
+    backgroundColor: color,
+    color: "#1c1d21",
+    fontWeight: 600,
+    textTransform: "none",
+    letterSpacing: "normal",
+  };
+}
+
 const tagListBase: React.CSSProperties = {
   display: "flex",
   gap: 6,
-  justifySelf: "end",
-  justifyContent: "center",
+  //justifySelf: "end",
+  justifyContent: "flex-end",
 };
 
 const styles: Record<string, React.CSSProperties> = {
@@ -345,6 +413,14 @@ const styles: Record<string, React.CSSProperties> = {
     ...tagListBase,
     flexWrap: "wrap" as const,
   },
+  expandedTagList: {
+    display: "grid",
+    gridTemplateColumns: "1fr minmax(0, 40%) 24px",
+    gap: 12,
+    overflow: "hidden",
+    transition: "max-height 0.2s ease, opacity 0.15s ease",
+    padding: "0 16px",
+  },
   headerTagList: {
     ...tagListBase,
     flexWrap: "nowrap" as const,
@@ -381,9 +457,10 @@ const styles: Record<string, React.CSSProperties> = {
     fontStyle: "italic" as const,
   },
   detailNameTags: {
-  display: "flex",
-  gap: 24,
-  alignItems: "flex-start",
+    display: "flex",
+    justifyContent: "center",
+    gap: "24px",
+    alignItems: "flex-start",
   },
   editButton: {
     alignSelf: "flex-start",
@@ -436,6 +513,11 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 10px",
     minHeight: 72,
     resize: "vertical" as const,
+  },
+  tagPicker: {
+    display: "flex",
+    flexWrap: "wrap" as const,
+    gap: 6,
   },
   editActions: {
     display: "flex",

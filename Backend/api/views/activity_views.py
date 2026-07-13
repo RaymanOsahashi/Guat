@@ -84,7 +84,7 @@ class ActivitySetTagsView(APIView):
     PATCH /activities/<id>/tags/
     Body: {"tags": [1, 2, 3]}   ← tag IDs
 
-    Adds the given tags to the activity, keeping any it already has.
+    Sets the given tags to the activity.
     """
 
     def patch(self, request, pk):
