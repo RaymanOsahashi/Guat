@@ -48,9 +48,20 @@ export default function ActivityList() {
 
   const [searchQuery, setSearchQuery] = useState("");
 
-  const filteredActivities = activities.filter((a) =>
-    a.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
+
+  const filteredActivities = activities
+    .filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .sort((a, b) => {
+      if (!sortDirection) return 0;
+      return sortDirection === "asc"
+        ? a.name.localeCompare(b.name)
+        : b.name.localeCompare(a.name);
+    });
+
+  function toggleSort() {
+    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
+  }
 
   function toggleExpanded(id: number) {
     setExpandedIds((prev) => {
@@ -185,6 +196,18 @@ export default function ActivityList() {
           style={styles.searchInput}
         />
       </div>
+
+      <select
+        style={styles.sortSelect}
+        value={sortDirection ?? ""}
+        onChange={(e) =>
+          setSortDirection(e.target.value === "" ? null : (e.target.value as "asc" | "desc"))
+        }
+      >
+        <option value="">Sort: Default</option>
+        <option value="asc">Name A → Z</option>
+        <option value="desc">Name Z → A</option>
+      </select>
 
       {activities.length === 0 ? (
         <p style={styles.message}>No activities found.</p>
@@ -595,5 +618,18 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "8px 10px 8px 34px",
     width: "100%",
     boxSizing: "border-box" as const,
+  },
+  sortSelect: {
+    padding: "5px 12px",
+    borderRadius: 6,
+    border: "1px solid #45454d",
+    backgroundColor: "#1c1d21",
+    color: "#c9c9d1",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    marginBottom: 12,
+    marginRight: "auto",
+    display: "block",
   },
 };
