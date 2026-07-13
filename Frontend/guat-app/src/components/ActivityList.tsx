@@ -1,6 +1,6 @@
 // src/components/ActivityList.tsx
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiGet, apiPatch, ApiError } from "../api/apiClient";
 import HeaderTagList from "./HeaderTagList";
 
@@ -50,8 +50,74 @@ export default function ActivityList() {
 
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
 
+  const [includeTagIds, setIncludeTagIds] = useState<number[]>([]);
+  const [excludeTagIds, setExcludeTagIds] = useState<number[]>([]);
+
+  const [openDropdown, setOpenDropdown] = useState<"sort" | "include" | "exclude" | null>(null);
+  const sortDropdownRef = useRef<HTMLDivElement>(null);
+  const includeDropdownRef = useRef<HTMLDivElement>(null);
+  const excludeDropdownRef = useRef<HTMLDivElement>(null);
+
+  function selectSort(direction: "asc" | "desc" | null) {
+    setSortDirection(direction);
+    setOpenDropdown(null);
+  }
+
+  const sortLabel =
+    sortDirection === "asc" ? "Name A → Z" : sortDirection === "desc" ? "Name Z → A" : "Sort: Default";
+
+  function toggleIncludeTag(tagId: number) {
+    setIncludeTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  }
+
+  function toggleExcludeTag(tagId: number) {
+    setExcludeTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]
+    );
+  }
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        openDropdown === "sort" &&
+        sortDropdownRef.current &&
+        !sortDropdownRef.current.contains(e.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+      if (
+        openDropdown === "include" &&
+        includeDropdownRef.current &&
+        !includeDropdownRef.current.contains(e.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+      if (
+        openDropdown === "exclude" &&
+        excludeDropdownRef.current &&
+        !excludeDropdownRef.current.contains(e.target as Node)
+      ) {
+        setOpenDropdown(null);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
   const filteredActivities = activities
     .filter((a) => a.name.toLowerCase().includes(searchQuery.toLowerCase()))
+    .filter(
+      (a) =>
+        includeTagIds.length === 0 ||
+        includeTagIds.every((id) => a.tags.some((t) => t.id === id))
+    )
+    .filter(
+      (a) =>
+        excludeTagIds.length === 0 ||
+        !excludeTagIds.some((id) => a.tags.some((t) => t.id === id))
+    )
     .sort((a, b) => {
       if (!sortDirection) return 0;
       return sortDirection === "asc"
@@ -197,17 +263,81 @@ export default function ActivityList() {
         />
       </div>
 
-      <select
-        style={styles.sortSelect}
-        value={sortDirection ?? ""}
-        onChange={(e) =>
-          setSortDirection(e.target.value === "" ? null : (e.target.value as "asc" | "desc"))
-        }
-      >
-        <option value="">Sort: Default</option>
-        <option value="asc">Name A → Z</option>
-        <option value="desc">Name Z → A</option>
-      </select>
+      <div style={styles.controlsRow}>
+        <div ref={sortDropdownRef} style={styles.tagDropdownWrapper}>
+          <button
+            type="button"
+            style={styles.tagDropdownButton}
+            onClick={() => setOpenDropdown((d) => (d === "sort" ? null : "sort"))}
+          >
+            {sortLabel}
+            <span style={styles.dropdownCaret}>▾</span>
+          </button>
+          {openDropdown === "sort" && (
+            <div style={styles.tagDropdownPanel}>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort(null)}>
+                Default
+              </div>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("asc")}>
+                Name A → Z
+              </div>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("desc")}>
+                Name Z → A
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div ref={includeDropdownRef} style={styles.tagDropdownWrapper}>
+          <button
+            type="button"
+            style={styles.tagDropdownButton}
+            onClick={() => setOpenDropdown((d) => (d === "include" ? null : "include"))}
+          >
+            {includeTagIds.length === 0 ? "Include tags" : `${includeTagIds.length} included`}
+            <span style={styles.dropdownCaret}>▾</span>
+          </button>
+          {openDropdown === "include" && (
+            <div style={styles.tagDropdownPanel}>
+              {allTags.map((tag) => (
+                <label key={tag.id} style={styles.tagDropdownOption}>
+                  <input
+                    type="checkbox"
+                    checked={includeTagIds.includes(tag.id)}
+                    onChange={() => toggleIncludeTag(tag.id)}
+                  />
+                  <span style={tagStyle(tag.color)}>{tag.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div ref={excludeDropdownRef} style={styles.tagDropdownWrapper}>
+          <button
+            type="button"
+            style={styles.tagDropdownButton}
+            onClick={() => setOpenDropdown((d) => (d === "exclude" ? null : "exclude"))}
+          >
+            {excludeTagIds.length === 0 ? "Exclude tags" : `${excludeTagIds.length} excluded`}
+            <span style={styles.dropdownCaret}>▾</span>
+          </button>
+          {openDropdown === "exclude" && (
+            <div style={styles.tagDropdownPanel}>
+              {allTags.map((tag) => (
+                <label key={tag.id} style={styles.tagDropdownOption}>
+                  <input
+                    type="checkbox"
+                    checked={excludeTagIds.includes(tag.id)}
+                    onChange={() => toggleExcludeTag(tag.id)}
+                  />
+                  <span style={tagStyle(tag.color)}>{tag.name}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {activities.length === 0 ? (
         <p style={styles.message}>No activities found.</p>
@@ -619,7 +749,20 @@ const styles: Record<string, React.CSSProperties> = {
     width: "100%",
     boxSizing: "border-box" as const,
   },
-  sortSelect: {
+  controlsRow: {
+    display: "flex",
+    gap: 10,
+    alignItems: "flex-end",
+    marginBottom: 12,
+  },
+  tagDropdownWrapper: {
+  position: "relative" as const,
+  },
+  tagDropdownButton: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
     padding: "5px 12px",
     borderRadius: 6,
     border: "1px solid #45454d",
@@ -628,8 +771,36 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 500,
     cursor: "pointer",
-    marginBottom: 12,
-    marginRight: "auto",
-    display: "block",
+    minWidth: 120,
+  },
+  dropdownCaret: {
+    fontSize: 10,
+    color: "#9a9aa2",
+  },
+  tagDropdownPanel: {
+    position: "absolute" as const,
+    top: "calc(100% + 4px)",
+    left: 0,
+    zIndex: 10,
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    padding: "6px 0",
+    minWidth: 160,
+    maxHeight: 220,
+    overflowY: "auto" as const,
+    display: "flex",
+    flexDirection: "column" as const,
+  },
+  tagDropdownOption: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "6px 12px",
+    fontSize: 13,
+    cursor: "pointer",
+    textTransform: "none" as const,
+    letterSpacing: "normal",
+    fontWeight: 400,
   },
 };
