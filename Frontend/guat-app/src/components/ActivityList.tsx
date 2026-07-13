@@ -125,10 +125,6 @@ export default function ActivityList() {
         : b.name.localeCompare(a.name);
     });
 
-  function toggleSort() {
-    setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-  }
-
   function toggleExpanded(id: number) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
