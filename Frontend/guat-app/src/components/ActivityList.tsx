@@ -46,6 +46,12 @@ export default function ActivityList() {
 
   const [allTags, setAllTags] = useState<Tag[]>([]);
 
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredActivities = activities.filter((a) =>
+    a.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   function toggleExpanded(id: number) {
     setExpandedIds((prev) => {
       const next = new Set(prev);
@@ -158,11 +164,33 @@ export default function ActivityList() {
     <div style={styles.container}>
       <h2 style={styles.heading}>Activities</h2>
 
+      <div style={styles.searchWrapper}>
+        <svg
+          style={styles.searchIcon}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <circle cx="11" cy="11" r="8" />
+          <line x1="21" y1="21" x2="16.65" y2="16.65" />
+        </svg>
+        <input
+          type="text"
+          placeholder="Search"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          style={styles.searchInput}
+        />
+      </div>
+
       {activities.length === 0 ? (
         <p style={styles.message}>No activities found.</p>
       ) : (
         <div style={styles.list}>
-          {activities.map((activity) => {
+          {filteredActivities.map((activity) => {
             const isExpanded = expandedIds.has(activity.id);
             const isEditing = editingId === activity.id;
 
@@ -542,5 +570,30 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 500,
     cursor: "pointer",
+  },
+  searchWrapper: {
+    position: "relative" as const,
+    marginBottom: 12,
+  },
+  searchIcon: {
+    position: "absolute" as const,
+    left: 10,
+    top: "50%",
+    transform: "translateY(-50%)",
+    width: 16,
+    height: 16,
+    color: "#9a9aa2",
+    pointerEvents: "none" as const,
+  },
+  searchInput: {
+    fontFamily: "inherit",
+    fontSize: 14,
+    color: "#ffffff",
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    padding: "8px 10px 8px 34px",
+    width: "100%",
+    boxSizing: "border-box" as const,
   },
 };
