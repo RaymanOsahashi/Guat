@@ -27,4 +27,28 @@ class Activity(models.Model):
 
     def __str__(self):
         return self.name
+
+# Line
+class Line(models.Model):
+    line_english = models.TextField(blank=True)
+    line_spanish = models.TextField(blank=True)
+    line_phonetic = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.line_english
+
+# Verse
+class Verse(models.Model):
+    name = models.CharField(max_length = 64)
+    
+
+# Song
+class Song(models.Model):
+    name = models.CharField(max_length=64)
+    name_spanish = models.CharField(max_length=64)
+    lyrics = models.TextField(blank=True)
+    lyrics_spanish = models.TextField(blank=True)
+
+    def __str__(self):
+        return self.name
     

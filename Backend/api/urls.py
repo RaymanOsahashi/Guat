@@ -24,5 +24,4 @@ urlpatterns = [
         # PATCH: Edit tags by id
         # DELETE: Delete tags by id
         path("tag/<int:pk>/", tag_views.TagRetrieveUpdateDestroy.as_view(), name = "tag-update")
-    
 ]

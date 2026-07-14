@@ -1,24 +1,45 @@
 import { useState } from "react";
 import TabBar, { type TabDef } from "./components/TabBar";
-import ActivityList from "./components/ActivityList"
+import ActivityList from "./components/ActivityList";
+import Manager from "./components/Manager";
 
-type TabId = "activities" | "manage";
+type TabId = "activities" | "manage" | "songs";
 
 const TABS: TabDef<TabId>[] = [
   { id: "activities", label: "Activities" },
-  { id: "manage", label: "Manage"}
+  { id: "manage", label: "Manage Activities & Tags" },
+  { id: "songs", label: "Songs" },
 ];
 
-function App() {
+export default function App() {
   const [activeTab, setActiveTab] = useState<TabId>("activities");
 
-  return(
+  const [refreshKey, setRefreshKey] = useState(0);
+  function handleDataChanged() {
+    setRefreshKey((k) => k + 1);
+  }
+
+  return (
     <div style={styles.pageWrapper}>
       <TabBar tabs={TABS} activeTab={activeTab} onChange={setActiveTab} />
-      {activeTab === "activities" && <ActivityList />}
-      {activeTab === "manage" && <ActivityList />}
+
+      <div style={tabPanelStyle(activeTab === "activities")}>
+        <ActivityList refreshKey={refreshKey} />
+      </div>
+      <div style={tabPanelStyle(activeTab === "manage")}>
+        <Manager onDataChanged={handleDataChanged} />
+      </div>
+      <div style={tabPanelStyle(activeTab === "songs")}>
+        <Manager onDataChanged={handleDataChanged} />
+      </div>
     </div>
-  )
+  );
+}
+
+function tabPanelStyle(isActive: boolean): React.CSSProperties {
+  return {
+    display: isActive ? "block" : "none",
+  };
 }
 
 const styles: Record<string, React.CSSProperties> = {
@@ -27,5 +48,3 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column" as const,
   },
 };
-
-export default App

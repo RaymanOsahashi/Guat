@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Activity, Tag
+from .models import Activity, Tag, Song
 
 class TagSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,3 +18,8 @@ class ActivityTagSerializer(serializers.Serializer):
         many = True,
         queryset = Tag.objects.all()
     )
+# Probably need to create a verse object and fill lyrics with said object
+class SongSerializer(serializers.Serializer):
+    class Meta:
+        model = Song
+        fields = ['id', 'name']

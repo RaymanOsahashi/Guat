@@ -28,7 +28,11 @@ type EditableFields = Pick<Activity, "name" | "description" | "description_spani
   tags: Tag[];
 };
 
-export default function ActivityList() {
+interface ActivityListProps {
+  refreshKey?: number;
+}
+
+export default function ActivityList({ refreshKey }: ActivityListProps) {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -108,6 +112,48 @@ export default function ActivityList() {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openDropdown]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActivities() {
+      setLoading(true);
+      setError(null);
+      try {
+        const data = await apiGet<Activity[]>(ACTIVITY_ENDPOINT);
+        if (!cancelled) setActivities(data);
+      } catch (err) {
+        if (!cancelled) {
+          setError(
+            err instanceof ApiError ? `Request failed (${err.status})` : "Failed to load activities"
+          );
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadActivities();
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    apiGet<Tag[]>(TAG_ENDPOINT)
+      .then((data) => {
+        if (!cancelled) setAllTags(data);
+      })
+      .catch(() => {
+        // Non-fatal: tag picker just stays empty if this fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
 
   useLayoutEffect(() => {
     if (!openDropdown) return;
