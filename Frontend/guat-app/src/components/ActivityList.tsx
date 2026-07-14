@@ -1,6 +1,6 @@
 // src/components/ActivityList.tsx
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useLayoutEffect, useState } from "react";
 import { apiGet, apiPatch, ApiError } from "../api/apiClient";
 import HeaderTagList from "./HeaderTagList";
 
@@ -58,6 +58,9 @@ export default function ActivityList() {
   const includeDropdownRef = useRef<HTMLDivElement>(null);
   const excludeDropdownRef = useRef<HTMLDivElement>(null);
 
+  const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
   function selectSort(direction: "asc" | "desc" | null) {
     setSortDirection(direction);
     setOpenDropdown(null);
@@ -104,6 +107,45 @@ export default function ActivityList() {
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [openDropdown]);
+
+  useLayoutEffect(() => {
+    if (!openDropdown) return;
+
+    const wrapperRef =
+      openDropdown === "sort"
+        ? sortDropdownRef
+        : openDropdown === "include"
+        ? includeDropdownRef
+        : excludeDropdownRef;
+
+    function reposition() {
+      const wrapperEl = wrapperRef.current;
+      const panelEl = panelRef.current;
+      if (!wrapperEl || !panelEl) return;
+
+      const wrapperRect = wrapperEl.getBoundingClientRect();
+      const panelWidth = panelEl.offsetWidth;
+      const margin = 8;
+
+      let left = wrapperRect.left;
+      if (left + panelWidth > window.innerWidth - margin) {
+        left = window.innerWidth - margin - panelWidth;
+      }
+      if (left < margin) {
+        left = margin;
+      }
+
+      setPanelPos({ top: wrapperRect.bottom + 4, left });
+    }
+
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
   }, [openDropdown]);
 
   const filteredActivities = activities
@@ -230,9 +272,6 @@ export default function ActivityList() {
     };
   }, []);
 
-  if (loading) return <p style={styles.message}>Loading activities…</p>;
-  if (error) return <p style={{ ...styles.message, color: "#c0392b" }}>{error}</p>;
-
   return (
     <div style={styles.container}>
       <h2 style={styles.heading}>Activities</h2>
@@ -270,7 +309,16 @@ export default function ActivityList() {
             <span style={styles.dropdownCaret}>▾</span>
           </button>
           {openDropdown === "sort" && (
-            <div style={styles.tagDropdownPanel}>
+            <div
+              ref={panelRef}
+              style={{
+                ...styles.tagDropdownPanel,
+                position: "fixed",
+                top: panelPos?.top ?? -9999,
+                left: panelPos?.left ?? -9999,
+                visibility: panelPos ? "visible" : "hidden",
+              }}
+            >
               <div style={styles.tagDropdownOption} onClick={() => selectSort(null)}>
                 Default
               </div>
@@ -294,7 +342,16 @@ export default function ActivityList() {
             <span style={styles.dropdownCaret}>▾</span>
           </button>
           {openDropdown === "include" && (
-            <div style={styles.tagDropdownPanel}>
+            <div
+              ref={panelRef}
+              style={{
+                ...styles.tagDropdownPanel,
+                position: "fixed",
+                top: panelPos?.top ?? -9999,
+                left: panelPos?.left ?? -9999,
+                visibility: panelPos ? "visible" : "hidden",
+              }}
+            >
               {allTags.map((tag) => (
                 <label key={tag.id} style={styles.tagDropdownOption}>
                   <input
@@ -319,7 +376,16 @@ export default function ActivityList() {
             <span style={styles.dropdownCaret}>▾</span>
           </button>
           {openDropdown === "exclude" && (
-            <div style={styles.tagDropdownPanel}>
+            <div
+              ref={panelRef}
+              style={{
+                ...styles.tagDropdownPanel,
+                position: "fixed",
+                top: panelPos?.top ?? -9999,
+                left: panelPos?.left ?? -9999,
+                visibility: panelPos ? "visible" : "hidden",
+              }}
+            >
               {allTags.map((tag) => (
                 <label key={tag.id} style={styles.tagDropdownOption}>
                   <input
@@ -335,7 +401,11 @@ export default function ActivityList() {
         </div>
       </div>
 
-      {activities.length === 0 ? (
+      {loading ? (
+        <p style={styles.message}>Loading activities…</p>
+      ) : error ? (
+        <p style={{ ...styles.message, color: "#c0392b" }}>{error}</p>
+      ) : activities.length === 0 ? (
         <p style={styles.message}>No activities found.</p>
       ) : (
         <div style={styles.list}>
@@ -750,6 +820,7 @@ const styles: Record<string, React.CSSProperties> = {
     gap: 10,
     alignItems: "flex-end",
     marginBottom: 12,
+    flexWrap: "wrap" as const,
   },
   tagDropdownWrapper: {
   position: "relative" as const,
@@ -767,22 +838,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
     fontWeight: 500,
     cursor: "pointer",
-    minWidth: 120,
+    minWidth: "clamp(72px, 26vw, 120px)",
+    maxWidth: "100%",
   },
   dropdownCaret: {
     fontSize: 10,
     color: "#9a9aa2",
   },
   tagDropdownPanel: {
-    position: "absolute" as const,
-    top: "calc(100% + 4px)",
-    left: 0,
     zIndex: 10,
     backgroundColor: "#1c1d21",
     border: "1px solid #45454d",
     borderRadius: 6,
     padding: "6px 0",
-    minWidth: 160,
+    minWidth: "clamp(120px, 45vw, 160px)",
+    maxWidth: "min(240px, 90vw)",
     maxHeight: 220,
     overflowY: "auto" as const,
     display: "flex",
