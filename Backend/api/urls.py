@@ -1,5 +1,5 @@
 from django.urls import path
-from .views import activity_views, tag_views
+from .views import activity_views, tag_views, song_views, verse_views
 
 urlpatterns = [
     # Activities
@@ -23,5 +23,25 @@ urlpatterns = [
         # PUT: Replace tags by id
         # PATCH: Edit tags by id
         # DELETE: Delete tags by id
-        path("tag/<int:pk>/", tag_views.TagRetrieveUpdateDestroy.as_view(), name = "tag-update")
+        path("tag/<int:pk>/", tag_views.TagRetrieveUpdateDestroy.as_view(), name = "tag-update"),
+    
+    # Songs
+        # POST/GET: Create and List songs
+        path("song/", song_views.SongListCreate.as_view(), name = "song-list-create"),
+        # GET: Get song by id
+        # PUT: Replace songs by id
+        # PATCH: Edit songs by id
+        # DELETE: Delete songs by id
+        path("song/<int:pk>/", song_views.SongRetrieveUpdateDestroy.as_view(), name = "song-update"),
+        # POST: Add verse to song
+        path('song/<int:pk>/verses/', song_views.SongAddVerseView.as_view(), name='song-add-verse'),
+
+    # Verses
+        # POST/GET: Create and List verses
+        path("verse/", verse_views.VerseListCreate.as_view(), name = "verse-list-create"),
+        # GET: Get verse by id
+        # PUT: Replace verses by id
+        # PATCH: Edit verses by id
+        # DELETE: Delete verses by id
+        path("verse/<int:pk>/", verse_views.VerseRetrieveUpdateDestroy.as_view(), name = "verse-update"),
 ]
