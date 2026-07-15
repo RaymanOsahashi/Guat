@@ -56,6 +56,10 @@ export default function SongList() {
   const [deletedVerseIds, setDeletedVerseIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
 
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   async function loadSongs(showFullLoading: boolean) {
     if (showFullLoading) setLoading(true);
     else setRefreshing(true);
@@ -302,6 +306,32 @@ export default function SongList() {
     }
   }
 
+  function cancelDelete() {
+    setConfirmingDeleteId(null);
+    setDeleteError(null);
+  }
+
+  async function confirmDelete(songId: number) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiDelete(`/song/${songId}/`);
+      setSongs((prev) => prev.filter((s) => s.id !== songId));
+      setEditingSongId(null);
+      setEditDraft(null);
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(songId);
+        return next;
+      });
+      setConfirmingDeleteId(null);
+    } catch (err) {
+      setDeleteError(err instanceof ApiError ? `Delete failed (${err.status})` : "Failed to delete song");
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div style={styles.container}>
       <div style={styles.searchWrapper}>
@@ -470,9 +500,14 @@ export default function SongList() {
 
                         <button style={styles.addVerseButton} onClick={addVerse}>+ Add verse</button>
 
-                        <div style={styles.editActions}>
-                          <button style={styles.cancelButton} onClick={cancelEdit} disabled={saving}>Cancel</button>
-                          <button style={styles.saveButton} onClick={() => saveEdit(song.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+                        <div style={styles.editActionsRow}>
+                          <div style={styles.editActions}>
+                            <button style={styles.saveButton} onClick={() => saveEdit(song.id)} disabled={saving}>{saving ? "Saving…" : "Save"}</button>
+                            <button style={styles.cancelButton} onClick={cancelEdit} disabled={saving}>Cancel</button>
+                          </div>
+                          <button style={styles.deleteSongButton} onClick={() => setConfirmingDeleteId(song.id)} disabled={saving}>
+                            Delete
+                          </button>
                         </div>
                       </>
                     ) : (
@@ -514,6 +549,34 @@ export default function SongList() {
           })}
         </div>
       )}
+    {confirmingDeleteId !== null && (
+      <div style={styles.modalOverlay} onClick={cancelDelete}>
+        <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+          <p style={styles.modalTitle}>Delete song?</p>
+          <p style={styles.modalText}>
+            {songs.find((s) => s.id === confirmingDeleteId)?.name_spanish}
+          </p>
+          <p style={styles.modalSubtext}>This can't be undone.</p>
+
+          {deleteError && (
+            <p style={{ ...styles.message, color: "#e57373", fontSize: 13 }}>{deleteError}</p>
+          )}
+
+          <div style={styles.modalActions}>
+            <button style={styles.cancelButton} onClick={cancelDelete} disabled={deleting}>
+              Cancel
+            </button>
+            <button
+              style={styles.deleteConfirmButton}
+              onClick={() => confirmDelete(confirmingDeleteId)}
+              disabled={deleting}
+            >
+              {deleting ? "Deleting…" : "Delete"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   );
 }
@@ -765,8 +828,14 @@ const styles: Record<string, React.CSSProperties> = {
   },
   editActions: {
     display: "flex",
-    justifyContent: "flex-end",
+    justifyContent: "flex-start",
     gap: 8,
+    marginTop: 10,
+  },
+  editActionsRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
     marginTop: 10,
   },
   cancelButton: {
@@ -783,6 +852,16 @@ const styles: Record<string, React.CSSProperties> = {
     border: "none",
     borderRadius: 6,
     color: "#ffffff",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 500,
+    padding: "6px 14px",
+  },
+  deleteSongButton: {
+    background: "none",
+    border: "1px solid #e57373",
+    borderRadius: 6,
+    color: "#e57373",
     cursor: "pointer",
     fontSize: 13,
     fontWeight: 500,
@@ -821,5 +900,56 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#e57373",
     fontSize: 12,
     margin: 0,
+  },
+  modalOverlay: {
+    position: "fixed" as const,
+    inset: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+  },
+  modalBox: {
+    backgroundColor: "#2d2e33",
+    border: "1px solid #45454d",
+    borderRadius: 12,
+    padding: 20,
+    width: "min(90vw, 360px)",
+    boxSizing: "border-box" as const,
+  },
+  modalTitle: {
+    margin: 0,
+    marginBottom: 6,
+    fontSize: 16,
+    fontWeight: 600,
+    color: "#ffffff",
+  },
+  modalText: {
+    margin: 0,
+    marginBottom: 4,
+    fontSize: 14,
+    color: "#c9c9d1",
+  },
+  modalSubtext: {
+    margin: 0,
+    marginBottom: 14,
+    fontSize: 12,
+    color: "#9a9aa2",
+  },
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
+  },
+  deleteConfirmButton: {
+    background: "#e57373",
+    border: "none",
+    borderRadius: 6,
+    color: "#ffffff",
+    cursor: "pointer",
+    fontSize: 13,
+    fontWeight: 500,
+    padding: "6px 14px",
   },
 };
