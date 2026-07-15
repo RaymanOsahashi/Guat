@@ -4,7 +4,7 @@ import { useEffect, useState , Fragment } from "react";
 import { apiGet, apiPatch, apiPost, apiDelete, ApiError } from "../api/apiClient";
 
 const SONG_ENDPOINT = "/song/";
-const VERSE_ENDPOINT = "/song/";
+const VERSE_ENDPOINT = "/verse/";
 
 interface Verse {
   id: number;
@@ -43,36 +43,36 @@ export default function SongList() {
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshPressed, setRefreshPressed] = useState(false);
+
+  const [addingSong, setAddingSong] = useState(false);
+  const [newSongDraft, setNewSongDraft] = useState<EditDraft>({ name: "", name_spanish: "", url: "", verses: [] });
+  const [newSongError, setNewSongError] = useState<string | null>(null);
+  const [creatingSong, setCreatingSong] = useState(false);
 
   const [editingSongId, setEditingSongId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
   const [deletedVerseIds, setDeletedVerseIds] = useState<number[]>([]);
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadSongs() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiGet<Song[]>(SONG_ENDPOINT);
-        if (!cancelled) setSongs(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiError ? `Request failed (${err.status})` : "Failed to load songs"
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
+  async function loadSongs(showFullLoading: boolean) {
+    if (showFullLoading) setLoading(true);
+    else setRefreshing(true);
+    setError(null);
+    try {
+      const data = await apiGet<Song[]>(SONG_ENDPOINT);
+      setSongs(data);
+    } catch (err) {
+      setError(err instanceof ApiError ? `Request failed (${err.status})` : "Failed to load songs");
+    } finally {
+      if (showFullLoading) setLoading(false);
+      else setRefreshing(false);
     }
+  }
 
-    loadSongs();
-    return () => {
-      cancelled = true;
-    };
+  useEffect(() => {
+    loadSongs(true);
   }, []);
 
   function toggleExpanded(id: number) {
@@ -92,6 +92,91 @@ export default function SongList() {
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.name_spanish.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  function startAddSong() {
+    setAddingSong(true);
+    setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+    setNewSongError(null);
+  }
+
+  function cancelAddSong() {
+    setAddingSong(false);
+    setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+    setNewSongError(null);
+  }
+
+  function updateNewSongField<K extends keyof EditDraft>(field: K, value: EditDraft[K]) {
+    setNewSongDraft((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function updateNewSongVerse(verseId: number | string, field: keyof EditVerse, value: string | number) {
+    setNewSongDraft((prev) => ({
+      ...prev,
+      verses: prev.verses.map((v) => (v.id === verseId ? { ...v, [field]: value } : v)),
+    }));
+  }
+
+  function addNewSongVerse() {
+    setNewSongDraft((prev) => ({
+      ...prev,
+      verses: [
+        ...prev.verses,
+        {
+          id: `new-${Date.now()}`,
+          order: prev.verses.length + 1,
+          name: "",
+          lyrics: "",
+          lyrics_spanish: "",
+          lyrics_phonetic: "",
+          isNew: true,
+        },
+      ],
+    }));
+  }
+
+  function removeNewSongVerse(verseId: number | string) {
+    setNewSongDraft((prev) => ({ ...prev, verses: prev.verses.filter((v) => v.id !== verseId) }));
+  }
+
+  async function saveNewSong() {
+    if (!newSongDraft.name_spanish.trim()) {
+      setNewSongError("Spanish name is required.");
+      return;
+    }
+    setNewSongError(null);
+    setCreatingSong(true);
+    try {
+      const created = await apiPost<Song>("/song/", {
+        name: newSongDraft.name,
+        name_spanish: newSongDraft.name_spanish,
+        url: newSongDraft.url,
+      });
+      if (!created) {
+        setNewSongError("Song was created but the server didn't return it — refresh to see it.");
+        return;
+      }
+
+      let latestSong: Song = created;
+      for (const v of newSongDraft.verses) {
+        latestSong =
+          (await apiPost<Song>(`/song/${created.id}/verses/`, {
+            order: v.order,
+            name: v.name,
+            lyrics: v.lyrics,
+            lyrics_spanish: v.lyrics_spanish,
+            lyrics_phonetic: v.lyrics_phonetic,
+          })) ?? latestSong;
+      }
+
+      setSongs((prev) => [...prev, latestSong]);
+      setAddingSong(false);
+      setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+    } catch (err) {
+      setNewSongError(err instanceof ApiError ? `Save failed (${err.status})` : "Failed to create song");
+    } finally {
+      setCreatingSong(false);
+    }
+  }
 
   function startEdit(song: Song) {
     setEditingSongId(song.id);
@@ -160,13 +245,13 @@ export default function SongList() {
         url: editDraft.url,
       });
 
-      await Promise.all(deletedVerseIds.map((id) => apiDelete(`/verse/${id}/`)));
+      await Promise.all(deletedVerseIds.map((id) => apiDelete(`${VERSE_ENDPOINT}${id}/`)));
 
       await Promise.all(
         editDraft.verses
           .filter((v) => !v.isNew)
           .map((v) =>
-            apiPatch<Verse>(`/verse/${v.id}/`, {
+            apiPatch<Verse>(`${VERSE_ENDPOINT}${v.id}/`, {
               order: v.order,
               name: v.name,
               lyrics: v.lyrics,
@@ -239,6 +324,41 @@ export default function SongList() {
           onChange={(e) => setSearchQuery(e.target.value)}
           style={styles.searchInput}
         />
+        <button
+          style={{
+            ...styles.refreshButton,
+            backgroundColor: refreshPressed ? "#33343a" : "#1c1d21",
+            borderColor: refreshPressed ? "#5b8def" : "#45454d",
+          }}
+          onMouseDown={() => setRefreshPressed(true)}
+          onMouseUp={() => setRefreshPressed(false)}
+          onMouseLeave={() => setRefreshPressed(false)}
+          onTouchStart={() => setRefreshPressed(true)}
+          onTouchEnd={() => setRefreshPressed(false)}
+          onClick={() => loadSongs(false)}
+          disabled={refreshing}
+          aria-label="Refresh songs"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              width: 16,
+              height: 16,
+              animation: refreshing ? "spin 0.8s linear infinite" : "none",
+            }}
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </button>
+        <button style={styles.addSongButton} onClick={startAddSong} aria-label="Add song">
+          + Add Song
+        </button>
       </div>
 
       {loading ? (
@@ -249,6 +369,45 @@ export default function SongList() {
         <p style={styles.message}>No songs found.</p>
       ) : (
         <div style={styles.list}>
+          {addingSong && (
+            <div style={{ ...styles.card, backgroundColor: DEFAULT_CARD_BG }}>
+              <div style={styles.cardDetail}>
+                <label style={styles.fieldLabel}>Spanish name *</label>
+                <input style={styles.fieldInput} value={newSongDraft.name_spanish} onChange={(e) => updateNewSongField("name_spanish", e.target.value)} />
+                <label style={styles.fieldLabel}>English name</label>
+                <input style={styles.fieldInput} value={newSongDraft.name} onChange={(e) => updateNewSongField("name", e.target.value)} />
+                <label style={styles.fieldLabel}>Song link</label>
+                <input style={styles.fieldInput} value={newSongDraft.url} onChange={(e) => updateNewSongField("url", e.target.value)} />
+
+                <div style={styles.verseEditList}>
+                  {newSongDraft.verses.map((verse) => (
+                    <div key={verse.id} style={styles.verseEditCard}>
+                      <div style={styles.verseEditHeader}>
+                        <input style={styles.orderInput} type="number" value={verse.order} onChange={(e) => updateNewSongVerse(verse.id, "order", Number(e.target.value))} />
+                        <input style={{ ...styles.fieldInput, flex: 1 }} placeholder="Verse name" value={verse.name} onChange={(e) => updateNewSongVerse(verse.id, "name", e.target.value)} />
+                        <button style={styles.removeVerseButton} onClick={() => removeNewSongVerse(verse.id)}>✕</button>
+                      </div>
+                      <label style={styles.verseFieldLabel}>Phonetic</label>
+                      <textarea style={styles.textArea} value={verse.lyrics_phonetic} onChange={(e) => updateNewSongVerse(verse.id, "lyrics_phonetic", e.target.value)} />
+                      <label style={styles.verseFieldLabel}>Spanish</label>
+                      <textarea style={styles.textArea} value={verse.lyrics_spanish} onChange={(e) => updateNewSongVerse(verse.id, "lyrics_spanish", e.target.value)} />
+                      <label style={styles.verseFieldLabel}>English</label>
+                      <textarea style={styles.textArea} value={verse.lyrics} onChange={(e) => updateNewSongVerse(verse.id, "lyrics", e.target.value)} />
+                    </div>
+                  ))}
+                </div>
+
+                <button style={styles.addVerseButton} onClick={addNewSongVerse}>+ Add verse</button>
+
+                {newSongError && <p style={styles.newSongError}>{newSongError}</p>}
+
+                <div style={styles.editActions}>
+                  <button style={styles.cancelButton} onClick={cancelAddSong} disabled={creatingSong}>Cancel</button>
+                  <button style={styles.saveButton} onClick={saveNewSong} disabled={creatingSong}>{creatingSong ? "Saving…" : "Save"}</button>
+                </div>
+              </div>
+            </div>
+          )}
           {filteredSongs.map((song) => {
             const isExpanded = expandedIds.has(song.id);
             const orderedVerses = [...song.verses].sort((a, b) => a.order - b.order);
@@ -497,6 +656,9 @@ const styles: Record<string, React.CSSProperties> = {
   searchWrapper: {
     position: "relative" as const,
     marginBottom: 12,
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
   },
   searchIcon: {
     position: "absolute" as const,
@@ -625,5 +787,39 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 13,
     fontWeight: 500,
     padding: "6px 14px",
+  },
+  refreshButton: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 34,
+    height: 34,
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    color: "#c9c9d1",
+    cursor: "pointer",
+  },
+  addSongButton: {
+    flexShrink: 0,
+    whiteSpace: "nowrap" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 34,
+    padding: "0 12px",
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    color: "#5b8def",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+  },
+  newSongError: {
+    color: "#e57373",
+    fontSize: 12,
+    margin: 0,
   },
 };

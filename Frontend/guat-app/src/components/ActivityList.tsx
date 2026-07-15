@@ -754,6 +754,7 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column" as const,
     gap: 4,
+    alignItems: "flex-start",
   },
   detailLabel: {
     fontSize: 11,
@@ -767,6 +768,7 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 14,
     lineHeight: 1.5,
     whiteSpace: "pre-wrap" as const,
+    textAlign: "left" as const,
   },
   detailMuted: {
     color: "#9a9aa2",
@@ -886,7 +888,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   controlsRow: {
     display: "flex",
-    gap: 10,
+    gap: 8,
     alignItems: "flex-end",
     marginBottom: 12,
     flexWrap: "wrap" as const,

@@ -30,7 +30,7 @@ class Activity(models.Model):
     
 # Song
 class Song(models.Model):
-    name = models.CharField(max_length=64)
+    name = models.CharField(max_length=64, blank=True)
     name_spanish = models.CharField(max_length=64)
     url = models.TextField(blank=True)
 

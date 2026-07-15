@@ -182,3 +182,29 @@
     border-right-color: var(--border);
   }
 }
+
+/* Modern Standard (Firefox, Chrome, Edge) */
+* {
+  scrollbar-color: transparent transparent; /* thumb track */
+  scrollbar-width: thin; 
+}
+
+/* WebKit Engines (Chrome, Safari, Edge) */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent; 
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: transparent; 
+  border-radius: 10px;
+}
+
+/* Optional: Show a subtle color only when hovering over the scrollable area */
+*:hover::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.2); 
+}
