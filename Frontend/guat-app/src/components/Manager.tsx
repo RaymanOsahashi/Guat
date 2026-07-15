@@ -120,6 +120,22 @@ useEffect(() => {
     }
   }
 
+  function handleTabIndent(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+
+    const target = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = target;
+
+    const newValue = value.slice(0, selectionStart) + "\t" + value.slice(selectionEnd);
+    target.value = newValue;
+    target.selectionStart = target.selectionEnd = selectionStart + 1;
+
+    // Sync React state
+    const event = new Event("input", { bubbles: true });
+    target.dispatchEvent(event);
+  }
+
   return (
     <div style={styles.container}>
       <h2 style={styles.heading}>Add Activities & Tags</h2>
@@ -147,6 +163,7 @@ useEffect(() => {
               onChange={(e) =>
                 setActivityForm((f) => ({ ...f, description: e.target.value }))
               }
+              onKeyDown={handleTabIndent}
             />
           </label>
 
@@ -158,6 +175,7 @@ useEffect(() => {
               onChange={(e) =>
                 setActivityForm((f) => ({ ...f, description_spanish: e.target.value }))
               }
+              onKeyDown={handleTabIndent}
             />
           </label>
           <label style={styles.fieldLabel}>

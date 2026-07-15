@@ -318,6 +318,22 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     };
   }, []);
 
+  function handleTabIndent(e: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (e.key !== "Tab") return;
+    e.preventDefault();
+
+    const target = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = target;
+
+    const newValue = value.slice(0, selectionStart) + "\t" + value.slice(selectionEnd);
+    target.value = newValue;
+    target.selectionStart = target.selectionEnd = selectionStart + 1;
+
+    // Sync React state
+    const event = new Event("input", { bubbles: true });
+    target.dispatchEvent(event);
+  }
+
   return (
     <div style={styles.container}>
       <div style={styles.searchWrapper}>
@@ -470,20 +486,11 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                   onClick={() => toggleExpanded(activity.id)}
                 >
                   <span style={styles.cardName}>{activity.name}</span>
-                  {isExpanded ? (
-                    <div style={styles.tagList}>
-                      {activity.tags.map((tag) => (
-                        <span key={tag.id} style={tagStyle(tag.color)}>
-                          {tag.name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <HeaderTagList tags={activity.tags} />
-                  )}
+                  {!isExpanded && <HeaderTagList tags={activity.tags} />}
                   <span
                     style={{
                       display: "inline-block",
+                      gridColumn: "3",
                       transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
                       transition: "transform 0.15s ease",
                       justifySelf: "end",
@@ -516,6 +523,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                             onChange={(e) =>
                               setEditForm((f) => ({ ...f, description: e.target.value }))
                             }
+                            onKeyDown={handleTabIndent}
                           />
                         </label>
 
@@ -530,6 +538,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                                 description_spanish: e.target.value,
                               }))
                             }
+                            onKeyDown={handleTabIndent}
                           />
                         </label>
 
@@ -578,6 +587,21 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                       </div>
                     ) : (
                       <>
+                        <div style={styles.detailRow}>
+                          <span style={styles.detailLabel}>Tags</span>
+                          <div style={styles.tagList}>
+                            {activity.tags.length === 0 ? (
+                              <span style={styles.detailMuted}>No tags</span>
+                            ) : (
+                              activity.tags.map((tag) => (
+                                <span key={tag.id} style={tagStyle(tag.color)}>
+                                  {tag.name}
+                                </span>
+                              ))
+                            )}
+                          </div>
+                        </div>
+
                         <div style={styles.detailRow}>
                           <span style={styles.detailLabel}>Description</span>
                           <p style={styles.detailText}>
@@ -703,6 +727,7 @@ const styles: Record<string, React.CSSProperties> = {
   tagList: {
     ...tagListBase,
     flexWrap: "wrap" as const,
+    justifyContent: "center"
   },
   expandedTagList: {
     display: "grid",
