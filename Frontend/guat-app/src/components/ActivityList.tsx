@@ -51,6 +51,8 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
   const [allTags, setAllTags] = useState<Tag[]>([]);
 
   const [searchQuery, setSearchQuery] = useState("");
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshPressed, setRefreshPressed] = useState(false);
 
   const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
 
@@ -64,6 +66,41 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
 
   const [panelPos, setPanelPos] = useState<{ top: number; left: number } | null>(null);
   const panelRef = useRef<HTMLDivElement>(null);
+
+  async function loadActivities() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await apiGet<Activity[]>(ACTIVITY_ENDPOINT);
+      setActivities(data);
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? `Request failed (${err.status})` : "Failed to load activities"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadTags() {
+    try {
+      const data = await apiGet<Tag[]>(TAG_ENDPOINT);
+      setAllTags(data);
+    } catch {
+      // Non-fatal: tag picker just stays empty if this fails.
+    }
+  }
+
+  useEffect(() => {
+    loadActivities();
+    loadTags();
+  }, [refreshKey]);
+
+  async function handleRefresh() {
+    setRefreshing(true);
+    await Promise.all([loadActivities(), loadTags()]);
+    setTimeout(() => setRefreshing(false), 300); // brief lit-up feedback
+  }
 
   function selectSort(direction: "asc" | "desc" | null) {
     setSortDirection(direction);
@@ -112,32 +149,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openDropdown]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadActivities() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiGet<Activity[]>(ACTIVITY_ENDPOINT);
-        if (!cancelled) setActivities(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiError ? `Request failed (${err.status})` : "Failed to load activities"
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadActivities();
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -277,34 +288,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
   useEffect(() => {
     let cancelled = false;
 
-    async function loadActivities() {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await apiGet<Activity[]>(ACTIVITY_ENDPOINT);
-        if (!cancelled) setActivities(data);
-      } catch (err) {
-        if (!cancelled) {
-          setError(
-            err instanceof ApiError
-              ? `Request failed (${err.status})`
-              : "Failed to load activities"
-          );
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
-    loadActivities();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
     apiGet<Tag[]>(TAG_ENDPOINT)
       .then((data) => {
         if (!cancelled) setAllTags(data);
@@ -336,26 +319,61 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
 
   return (
     <div style={styles.container}>
-      <div style={styles.searchWrapper}>
-        <svg
-          style={styles.searchIcon}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+      <div style={styles.searchRow}>
+        <div style={styles.searchWrapper}>
+          <svg
+            style={styles.searchIcon}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="text"
+            placeholder="Search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={styles.searchInput}
+          />
+        </div>
+
+        <button
+          style={{
+            ...styles.refreshButton,
+            backgroundColor: refreshPressed ? "#33343a" : "#1c1d21",
+            borderColor: refreshPressed ? "#5b8def" : "#45454d",
+          }}
+          onMouseDown={() => setRefreshPressed(true)}
+          onMouseUp={() => setRefreshPressed(false)}
+          onMouseLeave={() => setRefreshPressed(false)}
+          onTouchStart={() => setRefreshPressed(true)}
+          onTouchEnd={() => setRefreshPressed(false)}
+          onClick={() => handleRefresh}
+          disabled={refreshing}
+          aria-label="Refresh songs"
         >
-          <circle cx="11" cy="11" r="8" />
-          <line x1="21" y1="21" x2="16.65" y2="16.65" />
-        </svg>
-        <input
-          type="text"
-          placeholder="Search"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={styles.searchInput}
-        />
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              width: 16,
+              height: 16,
+              animation: refreshing ? "spin 0.8s linear infinite" : "none",
+            }}
+          >
+            <path d="M21 12a9 9 0 1 1-2.64-6.36" />
+            <path d="M21 3v6h-6" />
+          </svg>
+        </button>
       </div>
 
       <div style={styles.controlsRow}>
@@ -861,9 +879,43 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     cursor: "pointer",
   },
+  searchRow: {
+    display: "flex",
+    gap: 8,
+    alignItems: "center",
+    marginBottom: 12,
+  },
   searchWrapper: {
     position: "relative" as const,
-    marginBottom: 12,
+    flex: 1,
+    minWidth: 0,
+  },
+  // ...
+  refreshButton: {
+    flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 34,
+    height: 34,
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    color: "#c9c9d1",
+    cursor: "pointer",
+  },
+  refreshButtonActive: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 34,
+    height: 34,
+    borderRadius: 6,
+    border: "1px solid #5b8def",
+    backgroundColor: "#5b8def",
+    color: "#ffffff",
+    cursor: "pointer",
+    flexShrink: 0,
   },
   searchIcon: {
     position: "absolute" as const,
