@@ -9,7 +9,7 @@ type TabId = "activities" | "manage" | "songs";
 const TABS: TabDef<TabId>[] = [
   { id: "activities", label: "Activities" },
   { id: "songs", label: "Songs" },
-  { id: "manage", label: "Manage Activities & Tags" },
+  { id: "manage", label: "Manage Tags" },
 ];
 
 export default function App() {

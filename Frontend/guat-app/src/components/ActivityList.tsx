@@ -1,7 +1,7 @@
 // src/components/ActivityList.tsx
 
 import { useEffect, useRef, useLayoutEffect, useState } from "react";
-import { apiPost, apiGet, apiPatch, ApiError } from "../api/apiClient";
+import { apiPost, apiGet, apiPatch, apiDelete, ApiError } from "../api/apiClient";
 import HeaderTagList from "./HeaderTagList";
 
 const ACTIVITY_ENDPOINT = "/activity/";
@@ -57,6 +57,10 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [allTags, setAllTags] = useState<Tag[]>([]);
 
@@ -321,6 +325,38 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
       );
     } finally {
       setSaving(false);
+    }
+  }
+
+  function askDelete(id: number) {
+    setConfirmingDeleteId(id);
+    setDeleteError(null);
+  }
+
+  function cancelDelete() {
+    setConfirmingDeleteId(null);
+    setDeleteError(null);
+  }
+
+  async function confirmDelete(id: number) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await apiDelete(`${ACTIVITY_ENDPOINT}${id}/`);
+      setActivities((prev) => prev.filter((a) => a.id !== id));
+      setExpandedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+      if (editingId === id) setEditingId(null);
+      setConfirmingDeleteId(null);
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiError ? `Delete failed (${err.status})` : "Failed to delete activity"
+      );
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -679,20 +715,26 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                           <p style={{ ...styles.message, color: "#e57373" }}>{saveError}</p>
                         )}
 
-                        <div style={styles.editActions}>
+                        <div style={styles.editActionsRow}>
+                          <div style={styles.editActions}>
+                            <button
+                              style={styles.saveButton}
+                              onClick={() => saveEdit(activity.id)}
+                              disabled={saving}
+                            >
+                              {saving ? "Saving…" : "Save"}
+                            </button>
+                            <button style={styles.cancelButton} onClick={cancelEdit} disabled={saving}>
+                              Cancel
+                            </button>
+                          </div>
+
                           <button
-                            style={styles.saveButton}
-                            onClick={() => saveEdit(activity.id)}
-                            disabled={saving}
+                            style={styles.deleteButton}
+                            className="delete-button"
+                            onClick={() => askDelete(activity.id)}
                           >
-                            {saving ? "Saving…" : "Save"}
-                          </button>
-                          <button
-                            style={styles.cancelButton}
-                            onClick={cancelEdit}
-                            disabled={saving}
-                          >
-                            Cancel
+                            Delete
                           </button>
                         </div>
                       </div>
@@ -730,11 +772,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                             )}
                           </p>
                         </div>
-
-                        <button
-                          style={styles.editButton}
-                          onClick={() => startEdit(activity)}
-                        >
+                        <button style={styles.editButton} onClick={() => startEdit(activity)}>
                           Edit
                         </button>
                       </>
@@ -744,6 +782,38 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
               </div>
             );
           })}
+        </div>
+      )}
+      {confirmingDeleteId !== null && (
+        <div style={styles.modalOverlay} onClick={cancelDelete}>
+          <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+            <p style={styles.modalTitle}>Delete activity?</p>
+            <p style={styles.modalText}>
+              {activities.find((a) => a.id === confirmingDeleteId)?.name}
+            </p>
+            <p style={styles.modalSubtext}>This can't be undone.</p>
+
+            {deleteError && (
+              <p style={{ ...styles.message, color: "#e57373", fontSize: 13 }}>{deleteError}</p>
+            )}
+
+            <div style={styles.modalActions}>
+              <button
+                style={styles.cancelButton}
+                onClick={cancelDelete}
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                style={styles.deleteConfirmButton}
+                onClick={() => confirmDelete(confirmingDeleteId)}
+                disabled={deleting}
+              >
+                {deleting ? "Deleting…" : "Delete"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -891,6 +961,12 @@ const styles: Record<string, React.CSSProperties> = {
     gap: "24px",
     alignItems: "flex-start",
   },
+  editActionsRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
   editButton: {
     alignSelf: "flex-start",
     padding: "6px 14px",
@@ -906,6 +982,41 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column" as const,
     gap: 10,
+  },
+  detailActions: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteButton: {
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "1px solid #e57373",
+    backgroundColor: "transparent",
+    color: "#e57373",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
+  },
+  deleteConfirm: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+  },
+  deleteConfirmText: {
+    fontSize: 12,
+    color: "#c9c9d1",
+  },
+  deleteConfirmButton: {
+    padding: "6px 14px",
+    borderRadius: 6,
+    border: "none",
+    backgroundColor: "#e57373",
+    color: "#ffffff",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
   },
   fieldLabel: {
     display: "flex",
@@ -1100,5 +1211,45 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: "none" as const,
     letterSpacing: "normal",
     fontWeight: 400,
+  },
+
+  modalOverlay: {
+    position: "fixed" as const,
+    inset: 0,
+    backgroundColor: "rgba(0, 0, 0, 0.55)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+    padding: 16,
+  },
+  modalBox: {
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 10,
+    padding: 20,
+    width: "min(340px, 100%)",
+    boxSizing: "border-box" as const,
+  },
+  modalTitle: {
+    margin: 0,
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#ffffff",
+  },
+  modalText: {
+    margin: "6px 0 0",
+    fontSize: 13,
+    color: "#c9c9d1",
+  },
+  modalSubtext: {
+    margin: "4px 0 16px",
+    fontSize: 12,
+    color: "#9a9aa2",
+  },
+  modalActions: {
+    display: "flex",
+    justifyContent: "flex-end",
+    gap: 8,
   },
 };
