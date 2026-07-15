@@ -8,8 +8,8 @@ type TabId = "activities" | "manage" | "songs";
 
 const TABS: TabDef<TabId>[] = [
   { id: "activities", label: "Activities" },
-  { id: "manage", label: "Manage Activities & Tags" },
   { id: "songs", label: "Songs" },
+  { id: "manage", label: "Manage Activities & Tags" },
 ];
 
 export default function App() {
@@ -27,11 +27,11 @@ export default function App() {
       <div style={tabPanelStyle(activeTab === "activities")}>
         <ActivityList refreshKey={refreshKey} />
       </div>
-      <div style={tabPanelStyle(activeTab === "manage")}>
-        <Manager onDataChanged={handleDataChanged} />
-      </div>
       <div style={tabPanelStyle(activeTab === "songs")}>
         <SongList/>
+      </div>
+      <div style={tabPanelStyle(activeTab === "manage")}>
+        <Manager onDataChanged={handleDataChanged} />
       </div>
     </div>
   );

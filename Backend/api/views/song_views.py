@@ -25,7 +25,7 @@ class SongRetrieveUpdateDestroy(generics.RetrieveUpdateDestroyAPIView):
 # POST: Add verse to song
 class SongAddVerseView(APIView):
     """
-    POST /songs/<id>/verses/
+    POST /song/<id>/verses/
     Body: {"order": 1, 
            "name": "Verse 1", 
            "lyrics": "...", 
