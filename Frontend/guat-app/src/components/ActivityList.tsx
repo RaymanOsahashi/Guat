@@ -376,7 +376,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
           onMouseLeave={() => setRefreshPressed(false)}
           onTouchStart={() => setRefreshPressed(true)}
           onTouchEnd={() => setRefreshPressed(false)}
-          onClick={() => handleRefresh}
+          onClick={() => handleRefresh()}
           disabled={refreshing}
           aria-label="Refresh songs"
         >

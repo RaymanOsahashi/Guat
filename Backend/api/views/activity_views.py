@@ -94,6 +94,5 @@ class ActivitySetTagsView(APIView):
         serializer.is_valid(raise_exception = True)
 
         activity.tags.set(serializer.validated_data['tags'])
-        activity.updated_date.set(timezone.now)
 
         return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
