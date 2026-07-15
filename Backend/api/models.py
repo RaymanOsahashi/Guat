@@ -1,6 +1,7 @@
 from django.db import models
 from colorfield.fields import ColorField
 from django.utils.text import slugify
+from django.utils import timezone
 
 # Tags
 class Tag(models.Model):
@@ -24,6 +25,8 @@ class Activity(models.Model):
     tags = models.ManyToManyField(Tag, related_name='activities', blank=True)
     starred = models.BooleanField(default=False)
     archived = models.BooleanField(default=False)
+    created_date = models.DateTimeField(default=timezone.now)
+    updated_date = models.DateTimeField(auto_now=True)
 
     def __str__(self):
         return self.name
@@ -33,6 +36,7 @@ class Song(models.Model):
     name = models.CharField(max_length=64, blank=True)
     name_spanish = models.CharField(max_length=64)
     url = models.TextField(blank=True)
+    created_date = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
         return self.name_spanish

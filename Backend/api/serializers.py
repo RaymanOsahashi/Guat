@@ -20,7 +20,9 @@ class ActivitySerializer(serializers.ModelSerializer):
                   'description_spanish', 
                   'tags', 
                   'archived', 
-                  'starred']
+                  'starred',
+                  'created_date',
+                  'updated_date']
     
 class ActivityTagSerializer(serializers.Serializer):
     tags = serializers.PrimaryKeyRelatedField(
@@ -46,4 +48,5 @@ class SongSerializer(serializers.ModelSerializer):
                   'name', 
                   'name_spanish', 
                   'url',
-                  'verses',]
+                  'verses',
+                  'created_date']

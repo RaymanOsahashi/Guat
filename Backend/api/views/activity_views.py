@@ -1,9 +1,10 @@
 from django.shortcuts import render, get_object_or_404
+from django.utils import timezone
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.exceptions import NotFound, ParseError
-from ..models import Activity, Tag
+from ..models import Activity
 from ..serializers import ActivitySerializer, ActivityTagSerializer
 
 # Generic views ===================================
@@ -93,5 +94,6 @@ class ActivitySetTagsView(APIView):
         serializer.is_valid(raise_exception = True)
 
         activity.tags.set(serializer.validated_data['tags'])
+        activity.updated_date.set(timezone.now)
 
         return Response(ActivitySerializer(activity).data, status=status.HTTP_200_OK)
