@@ -320,8 +320,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.heading}>Activities</h2>
-
       <div style={styles.searchWrapper}>
         <svg
           style={styles.searchIcon}

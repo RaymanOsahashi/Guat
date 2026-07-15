@@ -2,6 +2,7 @@ import { useState } from "react";
 import TabBar, { type TabDef } from "./components/TabBar";
 import ActivityList from "./components/ActivityList";
 import Manager from "./components/Manager";
+import SongList from "./components/SongList";
 
 type TabId = "activities" | "manage" | "songs";
 
@@ -30,7 +31,7 @@ export default function App() {
         <Manager onDataChanged={handleDataChanged} />
       </div>
       <div style={tabPanelStyle(activeTab === "songs")}>
-        <Manager onDataChanged={handleDataChanged} />
+        <SongList/>
       </div>
     </div>
   );
