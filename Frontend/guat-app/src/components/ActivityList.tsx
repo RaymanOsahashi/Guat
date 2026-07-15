@@ -1,7 +1,7 @@
 // src/components/ActivityList.tsx
 
 import { useEffect, useRef, useLayoutEffect, useState } from "react";
-import { apiGet, apiPatch, ApiError } from "../api/apiClient";
+import { apiPost, apiGet, apiPatch, ApiError } from "../api/apiClient";
 import HeaderTagList from "./HeaderTagList";
 
 const ACTIVITY_ENDPOINT = "/activity/";
@@ -37,6 +37,16 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState<EditableFields>({
+    name: "",
+    description: "",
+    description_spanish: "",
+    tags: [],
+  });
+  const [createSaving, setCreateSaving] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<EditableFields>({
@@ -82,18 +92,22 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     }
   }
 
-  async function loadTags() {
+  async function loadTags(signal?: { cancelled: boolean }) {
     try {
       const data = await apiGet<Tag[]>(TAG_ENDPOINT);
-      setAllTags(data);
+      if (!signal?.cancelled) setAllTags(data);
     } catch {
       // Non-fatal: tag picker just stays empty if this fails.
     }
   }
 
   useEffect(() => {
+    const signal = { cancelled: false };
     loadActivities();
-    loadTags();
+    loadTags(signal);
+    return () => {
+      signal.cancelled = true;
+    };
   }, [refreshKey]);
 
   async function handleRefresh() {
@@ -149,22 +163,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [openDropdown]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    apiGet<Tag[]>(TAG_ENDPOINT)
-      .then((data) => {
-        if (!cancelled) setAllTags(data);
-      })
-      .catch(() => {
-        // Non-fatal: tag picker just stays empty if this fails.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [refreshKey]);
 
   useLayoutEffect(() => {
     if (!openDropdown) return;
@@ -237,6 +235,47 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     });
   }
 
+  function startCreate() {
+    setCreating(true);
+    setCreateError(null);
+    setCreateForm({ name: "", description: "", description_spanish: "", tags: [] });
+  }
+
+  function cancelCreate() {
+    setCreating(false);
+    setCreateError(null);
+  }
+
+  function toggleCreateTag(tag: Tag) {
+    setCreateForm((f) => {
+      const has = f.tags.some((t) => t.id === tag.id);
+      return {
+        ...f,
+        tags: has ? f.tags.filter((t) => t.id !== tag.id) : [...f.tags, tag],
+      };
+    });
+  }
+
+  async function saveCreate() {
+    setCreateSaving(true);
+    setCreateError(null);
+    try {
+      const { tags, ...fields } = createForm;
+      const created = await apiPost<Activity>(ACTIVITY_ENDPOINT, fields);
+      if (tags.length > 0) {
+        await apiPatch(`${ACTIVITY_ENDPOINT}${created.id}/tags/`, { tags: tags.map((t) => t.id) });
+      }
+      setActivities((prev) => [...prev, { ...created, tags }]);
+      setCreating(false);
+    } catch (err) {
+      setCreateError(
+        err instanceof ApiError ? `Create failed (${err.status})` : "Failed to create activity"
+      );
+    } finally {
+      setCreateSaving(false);
+    }
+  }
+
   function startEdit(activity: Activity) {
     setEditingId(activity.id);
     setSaveError(null);
@@ -284,22 +323,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
       setSaving(false);
     }
   }
-
-  useEffect(() => {
-    let cancelled = false;
-
-    apiGet<Tag[]>(TAG_ENDPOINT)
-      .then((data) => {
-        if (!cancelled) setAllTags(data);
-      })
-      .catch(() => {
-        // Non-fatal: tag picker just stays empty if this fails.
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   function handleTabIndent(e: React.KeyboardEvent<HTMLTextAreaElement>) {
     if (e.key !== "Tab") return;
@@ -374,8 +397,10 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
             <path d="M21 3v6h-6" />
           </svg>
         </button>
+        <button style={styles.addActivityButton} onClick={startCreate} aria-label="Add activity">
+          + Add Activity
+        </button>
       </div>
-
       <div style={styles.controlsRow}>
         <div ref={sortDropdownRef} style={styles.tagDropdownWrapper}>
           <button
@@ -478,6 +503,75 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
           )}
         </div>
       </div>
+      {creating && (
+        <div style={{ ...styles.card, backgroundColor: DEFAULT_CARD_BG, marginBottom: 12 }}>
+          <div style={{ ...styles.cardDetail, borderTop: "none" }}>
+            <div style={styles.editForm}>
+              <label style={styles.fieldLabel}>
+                Name
+                <input
+                  style={styles.textInput}
+                  value={createForm.name}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, name: e.target.value }))}
+                />
+              </label>
+
+              <label style={styles.fieldLabel}>
+                Description
+                <textarea
+                  style={styles.textArea}
+                  value={createForm.description}
+                  onChange={(e) => setCreateForm((f) => ({ ...f, description: e.target.value }))}
+                  onKeyDown={handleTabIndent}
+                />
+              </label>
+
+              <label style={styles.fieldLabel}>
+                Description (Spanish)
+                <textarea
+                  style={styles.textArea}
+                  value={createForm.description_spanish}
+                  onChange={(e) =>
+                    setCreateForm((f) => ({ ...f, description_spanish: e.target.value }))
+                  }
+                  onKeyDown={handleTabIndent}
+                />
+              </label>
+
+              <label style={styles.fieldLabel}>
+                Tags
+                <div style={styles.tagPicker}>
+                  {allTags.map((tag) => {
+                    const selected = createForm.tags.some((t) => t.id === tag.id);
+                    return (
+                      <span
+                        key={tag.id}
+                        onClick={() => toggleCreateTag(tag)}
+                        style={selected ? tagOptionSelectedStyle(tag.color) : tagOptionStyle(tag.color)}
+                      >
+                        {tag.name}
+                      </span>
+                    );
+                  })}
+                </div>
+              </label>
+
+              {createError && (
+                <p style={{ ...styles.message, color: "#e57373" }}>{createError}</p>
+              )}
+
+              <div style={styles.editActions}>
+                <button style={styles.saveButton} onClick={saveCreate} disabled={createSaving}>
+                  {createSaving ? "Creating…" : "Create"}
+                </button>
+                <button style={styles.cancelButton} onClick={cancelCreate} disabled={createSaving}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {loading ? (
         <p style={styles.message}>Loading activities…</p>
@@ -517,7 +611,6 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                     ▶
                   </span>
                 </div>
-
                 {isExpanded && (
                   <div style={styles.cardDetail}>
                     {isEditing ? (
@@ -916,6 +1009,22 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#ffffff",
     cursor: "pointer",
     flexShrink: 0,
+  },
+  addActivityButton: {
+    flexShrink: 0,
+    whiteSpace: "nowrap" as const,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    height: 34,
+    padding: "0 12px",
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    color: "#5b8def",
+    fontSize: 13,
+    fontWeight: 500,
+    cursor: "pointer",
   },
   searchIcon: {
     position: "absolute" as const,
