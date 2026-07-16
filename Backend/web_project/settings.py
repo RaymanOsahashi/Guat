@@ -29,6 +29,11 @@ SECRET_KEY = 'django-insecure-w0jgb8_-rwn5%r@eg17)qm=pm9!-u*_@2vi(em0dml6!5am9u#
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = False
 
+SECURE_PROXY_SSL_HEADER = (
+    "HTTP_X_FORWARDED_PROTO",
+    "https",
+)
+
 ALLOWED_HOSTS = [
     ".run.app",
     "localhost",
@@ -39,7 +44,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://127.0.0.1:5173",
     "http://localhost:3000",
     "http://127.0.0.1:3000",
-    os.environ.get('URL'),
+    "https://raymanosahashi.github.io",
 ]
 
 # Application definition
