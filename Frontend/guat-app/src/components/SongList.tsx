@@ -24,19 +24,96 @@ interface Song {
   verses: Verse[];
 }
 
-interface EditVerse extends Omit<Verse, "id"> {
-  id: number | string;
-  isNew?: boolean;
-}
-
 interface EditDraft {
   name: string;
   name_spanish: string;
   url: string;
-  verses: EditVerse[];
+  versesText: string;
 }
 
 type LyricKind = "phonetic" | "spanish" | "english";
+
+interface ParsedVerse {
+  name: string;
+  lyrics: string;
+  lyrics_spanish: string;
+  lyrics_phonetic: string;
+}
+
+interface ParseResult {
+  verses: ParsedVerse[];
+  error: string | null;
+}
+
+// (Name) starts a verse. [line] = phonetic, {line} = english, anything else = spanish.
+function parseVersesText(text: string): ParseResult {
+  const lines = text.split("\n");
+  const verses: ParsedVerse[] = [];
+  let current: { name: string; english: string[]; spanish: string[]; phonetic: string[] } | null = null;
+
+  const pushCurrent = () => {
+    if (current) {
+      verses.push({
+        name: current.name,
+        lyrics: current.english.join("\n"),
+        lyrics_spanish: current.spanish.join("\n"),
+        lyrics_phonetic: current.phonetic.join("\n"),
+      });
+    }
+  };
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (line === "") continue;
+
+    const verseMatch = line.match(/^\((.*)\)$/);
+    if (verseMatch) {
+      pushCurrent();
+      current = { name: verseMatch[1].trim(), english: [], spanish: [], phonetic: [] };
+      continue;
+    }
+
+    if (!current) {
+      return { verses: [], error: "Start the text with a verse name in parentheses, e.g. (Verse 1)." };
+    }
+
+    const phoneticMatch = line.match(/^\[(.*)\]$/);
+    const englishMatch = line.match(/^\{(.*)\}$/);
+    if (phoneticMatch) {
+      current.phonetic.push(phoneticMatch[1]);
+    } else if (englishMatch) {
+      current.english.push(englishMatch[1]);
+    } else {
+      current.spanish.push(line);
+    }
+  }
+
+  pushCurrent();
+  return { verses, error: null };
+}
+
+// Inverse of the parser — used to prefill the textarea so an immediate save is a no-op.
+function serializeVerses(verses: Verse[]): string {
+  const sorted = [...verses].sort((a, b) => a.order - b.order);
+  const blocks = sorted.map((v) => {
+    const englishLines = v.lyrics.split("\n");
+    const spanishLines = v.lyrics_spanish.split("\n");
+    const phoneticLines = v.lyrics_phonetic.split("\n");
+    const maxLines = Math.max(englishLines.length, spanishLines.length, phoneticLines.length);
+
+    const groups: string[] = [];
+    for (let i = 0; i < maxLines; i++) {
+      const groupLines: string[] = [];
+      if (phoneticLines[i]) groupLines.push(`[${phoneticLines[i]}]`);
+      if (spanishLines[i]) groupLines.push(spanishLines[i]);
+      if (englishLines[i]) groupLines.push(`{${englishLines[i]}}`);
+      if (groupLines.length) groups.push(groupLines.join("\n"));
+    }
+
+    return groups.length ? `(${v.name})\n\n${groups.join("\n\n")}` : `(${v.name})`;
+  });
+  return blocks.join("\n\n");
+}
 
 export default function SongList() {
   const [songs, setSongs] = useState<Song[]>([]);
@@ -48,13 +125,13 @@ export default function SongList() {
   const [refreshPressed, setRefreshPressed] = useState(false);
 
   const [addingSong, setAddingSong] = useState(false);
-  const [newSongDraft, setNewSongDraft] = useState<EditDraft>({ name: "", name_spanish: "", url: "", verses: [] });
+  const [newSongDraft, setNewSongDraft] = useState<EditDraft>({ name: "", name_spanish: "", url: "", versesText: "" });
   const [newSongError, setNewSongError] = useState<string | null>(null);
   const [creatingSong, setCreatingSong] = useState(false);
 
   const [editingSongId, setEditingSongId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<EditDraft | null>(null);
-  const [deletedVerseIds, setDeletedVerseIds] = useState<number[]>([]);
+  const [editError, setEditError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const [confirmingDeleteId, setConfirmingDeleteId] = useState<number | null>(null);
@@ -104,13 +181,13 @@ export default function SongList() {
 
   function startAddSong() {
     setAddingSong(true);
-    setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+    setNewSongDraft({ name: "", name_spanish: "", url: "", versesText: "" });
     setNewSongError(null);
   }
 
   function cancelAddSong() {
     setAddingSong(false);
-    setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+    setNewSongDraft({ name: "", name_spanish: "", url: "", versesText: "" });
     setNewSongError(null);
   }
 
@@ -118,38 +195,14 @@ export default function SongList() {
     setNewSongDraft((prev) => ({ ...prev, [field]: value }));
   }
 
-  function updateNewSongVerse(verseId: number | string, field: keyof EditVerse, value: string | number) {
-    setNewSongDraft((prev) => ({
-      ...prev,
-      verses: prev.verses.map((v) => (v.id === verseId ? { ...v, [field]: value } : v)),
-    }));
-  }
-
-  function addNewSongVerse() {
-    setNewSongDraft((prev) => ({
-      ...prev,
-      verses: [
-        ...prev.verses,
-        {
-          id: `new-${Date.now()}`,
-          order: prev.verses.length + 1,
-          name: "",
-          lyrics: "",
-          lyrics_spanish: "",
-          lyrics_phonetic: "",
-          isNew: true,
-        },
-      ],
-    }));
-  }
-
-  function removeNewSongVerse(verseId: number | string) {
-    setNewSongDraft((prev) => ({ ...prev, verses: prev.verses.filter((v) => v.id !== verseId) }));
-  }
-
   async function saveNewSong() {
     if (!newSongDraft.name_spanish.trim()) {
       setNewSongError("Spanish name is required.");
+      return;
+    }
+    const { verses: parsedVerses, error } = parseVersesText(newSongDraft.versesText);
+    if (error) {
+      setNewSongError(error);
       return;
     }
     setNewSongError(null);
@@ -166,10 +219,11 @@ export default function SongList() {
       }
 
       let latestSong: Song = created;
-      for (const v of newSongDraft.verses) {
+      for (let i = 0; i < parsedVerses.length; i++) {
+        const v = parsedVerses[i];
         latestSong =
           (await apiPost<Song>(`/song/${created.id}/verses/`, {
-            order: v.order,
+            order: i + 1,
             name: v.name,
             lyrics: v.lyrics,
             lyrics_spanish: v.lyrics_spanish,
@@ -179,7 +233,7 @@ export default function SongList() {
 
       setSongs((prev) => [...prev, latestSong]);
       setAddingSong(false);
-      setNewSongDraft({ name: "", name_spanish: "", url: "", verses: [] });
+      setNewSongDraft({ name: "", name_spanish: "", url: "", versesText: "" });
     } catch (err) {
       setNewSongError(err instanceof ApiError ? `Save failed (${err.status})` : "Failed to create song");
     } finally {
@@ -193,59 +247,30 @@ export default function SongList() {
       name: song.name,
       name_spanish: song.name_spanish,
       url: song.url,
-      verses: [...song.verses].sort((a, b) => a.order - b.order).map((v) => ({ ...v })),
+      versesText: serializeVerses(song.verses),
     });
-    setDeletedVerseIds([]);
+    setEditError(null);
     setExpandedIds((prev) => new Set(prev).add(song.id));
   }
 
   function cancelEdit() {
     setEditingSongId(null);
     setEditDraft(null);
-    setDeletedVerseIds([]);
+    setEditError(null);
   }
 
   function updateDraft<K extends keyof EditDraft>(field: K, value: EditDraft[K]) {
     setEditDraft((prev) => (prev ? { ...prev, [field]: value } : prev));
   }
 
-  function updateVerse(verseId: number | string, field: keyof EditVerse, value: string | number) {
-    setEditDraft((prev) =>
-      prev
-        ? { ...prev, verses: prev.verses.map((v) => (v.id === verseId ? { ...v, [field]: value } : v)) }
-        : prev
-    );
-  }
-
-  function addVerse() {
-    setEditDraft((prev) =>
-      prev
-        ? {
-            ...prev,
-            verses: [
-              ...prev.verses,
-              {
-                id: `new-${Date.now()}`,
-                order: prev.verses.length + 1,
-                name: "",
-                lyrics: "",
-                lyrics_spanish: "",
-                lyrics_phonetic: "",
-                isNew: true,
-              },
-            ],
-          }
-        : prev
-    );
-  }
-
-  function removeVerse(verseId: number | string) {
-    setEditDraft((prev) => (prev ? { ...prev, verses: prev.verses.filter((v) => v.id !== verseId) } : prev));
-    if (typeof verseId === "number") setDeletedVerseIds((prev) => [...prev, verseId]);
-  }
-
   async function saveEdit(songId: number) {
     if (!editDraft) return;
+    const { verses: parsedVerses, error } = parseVersesText(editDraft.versesText);
+    if (error) {
+      setEditError(error);
+      return;
+    }
+    setEditError(null);
     setSaving(true);
     try {
       await apiPatch<Song>(`/song/${songId}/`, {
@@ -254,28 +279,32 @@ export default function SongList() {
         url: editDraft.url,
       });
 
-      await Promise.all(deletedVerseIds.map((id) => apiDelete(`${VERSE_ENDPOINT}${id}/`)));
+      const original = songs.find((s) => s.id === songId);
+      const originalVerses = original ? [...original.verses].sort((a, b) => a.order - b.order) : [];
+
+      const toUpdate = parsedVerses.slice(0, originalVerses.length);
+      const toCreate = parsedVerses.slice(originalVerses.length);
+      const toDeleteIds = originalVerses.slice(parsedVerses.length).map((v) => v.id);
+
+      await Promise.all(toDeleteIds.map((id) => apiDelete(`${VERSE_ENDPOINT}${id}/`)));
 
       await Promise.all(
-        editDraft.verses
-          .filter((v) => !v.isNew)
-          .map((v) =>
-            apiPatch<Verse>(`${VERSE_ENDPOINT}${v.id}/`, {
-              order: v.order,
-              name: v.name,
-              lyrics: v.lyrics,
-              lyrics_spanish: v.lyrics_spanish,
-              lyrics_phonetic: v.lyrics_phonetic,
-            })
-          )
+        toUpdate.map((v, i) =>
+          apiPatch<Verse>(`${VERSE_ENDPOINT}${originalVerses[i].id}/`, {
+            order: i + 1,
+            name: v.name,
+            lyrics: v.lyrics,
+            lyrics_spanish: v.lyrics_spanish,
+            lyrics_phonetic: v.lyrics_phonetic,
+          })
+        )
       );
 
-      // POST new verses — each returns the whole Song, not the Verse,
-      // so keep the last one as the source of truth for the final verse list
       let latestSong: Song | null = null;
-      for (const v of editDraft.verses.filter((v) => v.isNew)) {
+      for (let i = 0; i < toCreate.length; i++) {
+        const v = toCreate[i];
         latestSong = await apiPost<Song>(`/song/${songId}/verses/`, {
-          order: v.order,
+          order: originalVerses.length + i + 1,
           name: v.name,
           lyrics: v.lyrics,
           lyrics_spanish: v.lyrics_spanish,
@@ -285,9 +314,9 @@ export default function SongList() {
 
       const finalVerses: Verse[] =
         latestSong?.verses ??
-        editDraft.verses.map((v) => ({
-          id: v.id as number,
-          order: v.order,
+        toUpdate.map((v, i) => ({
+          id: originalVerses[i].id,
+          order: i + 1,
           name: v.name,
           lyrics: v.lyrics,
           lyrics_spanish: v.lyrics_spanish,
@@ -303,12 +332,17 @@ export default function SongList() {
       );
       setEditingSongId(null);
       setEditDraft(null);
-      setDeletedVerseIds([]);
     } catch (err) {
       setError(err instanceof ApiError ? `Save failed (${err.status})` : "Failed to save song");
     } finally {
       setSaving(false);
     }
+  }
+
+  function autoResizeTextarea(el: HTMLTextAreaElement | null) {
+    if (!el) return;
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
   }
 
   function cancelDelete() {
@@ -414,25 +448,20 @@ export default function SongList() {
                 <label style={styles.fieldLabel}>Song link</label>
                 <input style={styles.fieldInput} value={newSongDraft.url} onChange={(e) => updateNewSongField("url", e.target.value)} />
 
-                <div style={styles.verseEditList}>
-                  {newSongDraft.verses.map((verse) => (
-                    <div key={verse.id} style={styles.verseEditCard}>
-                      <div style={styles.verseEditHeader}>
-                        <input style={styles.orderInput} type="number" value={verse.order} onChange={(e) => updateNewSongVerse(verse.id, "order", Number(e.target.value))} />
-                        <input style={{ ...styles.fieldInput, flex: 1 }} placeholder="Verse name" value={verse.name} onChange={(e) => updateNewSongVerse(verse.id, "name", e.target.value)} />
-                        <button style={styles.removeVerseButton} onClick={() => removeNewSongVerse(verse.id)}>✕</button>
-                      </div>
-                      <label style={styles.verseFieldLabel}>Phonetic</label>
-                      <textarea style={styles.textArea} value={verse.lyrics_phonetic} onChange={(e) => updateNewSongVerse(verse.id, "lyrics_phonetic", e.target.value)} />
-                      <label style={styles.verseFieldLabel}>Spanish</label>
-                      <textarea style={styles.textArea} value={verse.lyrics_spanish} onChange={(e) => updateNewSongVerse(verse.id, "lyrics_spanish", e.target.value)} />
-                      <label style={styles.verseFieldLabel}>English</label>
-                      <textarea style={styles.textArea} value={verse.lyrics} onChange={(e) => updateNewSongVerse(verse.id, "lyrics", e.target.value)} />
-                    </div>
-                  ))}
-                </div>
-
-                <button style={styles.addVerseButton} onClick={addNewSongVerse}>+ Add verse</button>
+                <label style={styles.fieldLabel}>Verses</label>
+                <textarea
+                  ref={autoResizeTextarea}
+                  style={styles.bigTextArea}
+                  placeholder={"(Verse 1)\n\n[Phonetic line]\nSpanish line\n{English line}"}
+                  value={newSongDraft.versesText}
+                  onChange={(e) => {
+                    updateNewSongField("versesText", e.target.value);
+                    autoResizeTextarea(e.target);
+                  }}
+                />
+                <p style={styles.helperText}>
+                  Wrap verse names in ( ), phonetic lines in [ ], English lines in {"{ }"}. Unmarked lines are Spanish.
+                </p>
 
                 {newSongError && <p style={styles.newSongError}>{newSongError}</p>}
 
@@ -483,27 +512,21 @@ export default function SongList() {
                         <label style={styles.fieldLabel}>Song link</label>
                         <input style={styles.fieldInput} value={editDraft.url} onChange={(e) => updateDraft("url", e.target.value)} />
 
-                        <div style={styles.verseEditList}>
-                          {editDraft.verses.map((verse) => (
-                            <div key={verse.id} style={styles.verseEditCard}>
-                              <div style={styles.verseEditHeader}>
-                                <input style={styles.orderInput} type="number" value={verse.order} onChange={(e) => updateVerse(verse.id, "order", Number(e.target.value))} />
-                                <input style={{ ...styles.fieldInput, flex: 1 }} placeholder="Verse name" value={verse.name} onChange={(e) => updateVerse(verse.id, "name", e.target.value)} />
-                                <button style={styles.removeVerseButton} onClick={() => removeVerse(verse.id)}>✕</button>
-                              </div>
-                              <label style={styles.verseFieldLabel}>Phonetic Lyrics</label>
-                              <textarea style={styles.textArea} placeholder="Phonetic lyrics" value={verse.lyrics_phonetic} onChange={(e) => updateVerse(verse.id, "lyrics_phonetic", e.target.value)} />
+                        <label style={styles.fieldLabel}>Verses</label>
+                        <textarea
+                          ref={autoResizeTextarea}
+                          style={styles.bigTextArea}
+                          value={editDraft.versesText}
+                          onChange={(e) => {
+                            updateDraft("versesText", e.target.value);
+                            autoResizeTextarea(e.target);
+                          }}
+                        />
+                        <p style={styles.helperText}>
+                          Wrap verse names in ( ), phonetic lines in [ ], English lines in {"{ }"}. Unmarked lines are Spanish.
+                        </p>
 
-                              <label style={styles.verseFieldLabel}>Spanish Lyrics</label>
-                              <textarea style={styles.textArea} placeholder="Spanish lyrics" value={verse.lyrics_spanish} onChange={(e) => updateVerse(verse.id, "lyrics_spanish", e.target.value)} />
-
-                              <label style={styles.verseFieldLabel}>English Lyrics</label>
-                              <textarea style={styles.textArea} placeholder="English lyrics" value={verse.lyrics} onChange={(e) => updateVerse(verse.id, "lyrics", e.target.value)} />
-                            </div>
-                          ))}
-                        </div>
-
-                        <button style={styles.addVerseButton} onClick={addVerse}>+ Add verse</button>
+                        {editError && <p style={styles.newSongError}>{editError}</p>}
 
                         <div style={styles.editActionsRow}>
                           <div style={styles.editActions}>
@@ -768,45 +791,6 @@ const styles: Record<string, React.CSSProperties> = {
     boxSizing: "border-box" as const,
     marginBottom: 4,
   },
-  verseEditList: {
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 10,
-    marginTop: 8,
-  },
-  verseEditCard: {
-    border: "1px solid #45454d",
-    borderRadius: 8,
-    padding: 10,
-    display: "flex",
-    flexDirection: "column" as const,
-    gap: 6,
-    backgroundColor: "#1c1d21",
-  },
-  verseEditHeader: {
-    display: "flex",
-    gap: 8,
-    alignItems: "center",
-  },
-  orderInput: {
-    width: 44,
-    fontFamily: "inherit",
-    fontSize: 13,
-    color: "#ffffff",
-    backgroundColor: "#2d2e33",
-    border: "1px solid #45454d",
-    borderRadius: 6,
-    padding: "6px 6px",
-    boxSizing: "border-box" as const,
-  },
-  removeVerseButton: {
-    background: "none",
-    border: "none",
-    color: "#e57373",
-    cursor: "pointer",
-    fontSize: 14,
-    padding: "4px 6px",
-  },
   textArea: {
     fontFamily: "inherit",
     fontSize: 13,
@@ -820,16 +804,26 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 90,
     resize: "vertical" as const,
   },
-  addVerseButton: {
-    alignSelf: "flex-start",
-    background: "none",
-    border: "1px dashed #45454d",
-    borderRadius: 6,
-    color: "#5b8def",
-    cursor: "pointer",
+  bigTextArea: {
+    fontFamily: "sans-serif",
     fontSize: 13,
-    padding: "6px 10px",
-    marginTop: 6,
+    color: "#ffffff",
+    backgroundColor: "#1c1d21",
+    border: "1px solid #45454d",
+    borderRadius: 6,
+    padding: "10px 12px",
+    width: "100%",
+    boxSizing: "border-box" as const,
+    lineHeight: 1.5,
+    marginTop: 4,
+    overflow: "hidden" as const,
+    resize: "none" as const,
+  },
+  helperText: {
+    fontSize: 11,
+    color: "#9a9aa2",
+    marginTop: 4,
+    marginBottom: 0,
   },
   editActions: {
     display: "flex",
