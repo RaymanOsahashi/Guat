@@ -104,15 +104,22 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     try {
       const data = await apiGet<Tag[]>(TAG_ENDPOINT);
       if (!signal?.cancelled) setAllTags(data);
+      return data;
     } catch {
       // Non-fatal: tag picker just stays empty if this fails.
+      return null;
     }
   }
 
   useEffect(() => {
     const signal = { cancelled: false };
     loadActivities();
-    loadTags(signal);
+    loadTags(signal).then((tags) => {
+      if (signal.cancelled || !tags) return;
+      const validTagIds = new Set(tags.map((t) => t.id));
+      setIncludeTagIds((prev) => prev.filter((id) => validTagIds.has(id)));
+      setExcludeTagIds((prev) => prev.filter((id) => validTagIds.has(id)));
+    });
     return () => {
       signal.cancelled = true;
     };

@@ -17,7 +17,7 @@ interface NewTag {
 
 const EMPTY_TAG: NewTag = {
   name: "",
-  color: "#5b8def",
+  color: "#ffffff",
 };
 
 interface ManagerProps {
