@@ -11,7 +11,7 @@
 // - If you're on Next.js, use process.env.NEXT_PUBLIC_API_BASE_URL instead.
 
 const BASE_URL: string =
-  (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:3000";
+  (import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8000";
 
 export class ApiError extends Error {
   status: number;
