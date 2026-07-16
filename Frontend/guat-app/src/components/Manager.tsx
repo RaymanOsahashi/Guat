@@ -37,7 +37,6 @@ export default function Manager({ onDataChanged }: ManagerProps) {
   const [editTagSuccess, setEditTagSuccess] = useState(false);
 
   const [availableTags, setAvailableTags] = useState<Tag[]>([]);
-  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
 
   const [confirmingDeleteTagId, setConfirmingDeleteTagId] = useState<number | null>(null);
   const [deletingTag, setDeletingTag] = useState(false);
