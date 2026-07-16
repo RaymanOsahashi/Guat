@@ -20,6 +20,7 @@ interface Song {
   name: string;
   name_spanish: string;
   url: string;
+  created_date: string;
   verses: Verse[];
 }
 
@@ -91,7 +92,11 @@ export default function SongList() {
     });
   }
 
-  const filteredSongs = songs.filter(
+  const sortedSongs = [...songs].sort(
+    (a, b) => new Date(a.created_date).getTime() - new Date(b.created_date).getTime()
+  );
+
+  const filteredSongs = sortedSongs.filter(
     (s) =>
       s.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       s.name_spanish.toLowerCase().includes(searchQuery.toLowerCase())
@@ -911,7 +916,7 @@ const styles: Record<string, React.CSSProperties> = {
     zIndex: 100,
   },
   modalBox: {
-    backgroundColor: "#2d2e33",
+    backgroundColor: "#1c1d21",
     border: "1px solid #45454d",
     borderRadius: 12,
     padding: 20,

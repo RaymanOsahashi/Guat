@@ -20,6 +20,8 @@ interface Activity {
   description: string;
   description_spanish: string;
   tags: Tag[];
+  created_date: string;
+  updated_date: string
   achived: boolean;
   starred: boolean;
 }
@@ -31,6 +33,8 @@ type EditableFields = Pick<Activity, "name" | "description" | "description_spani
 interface ActivityListProps {
   refreshKey?: number;
 }
+
+type SortMode = "name_asc" | "name_desc" | "created_desc" | "created_asc" | "updated_desc";
 
 export default function ActivityList({ refreshKey }: ActivityListProps) {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -68,7 +72,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshPressed, setRefreshPressed] = useState(false);
 
-  const [sortDirection, setSortDirection] = useState<"asc" | "desc" | null>(null);
+  const [sortMode, setSortMode] = useState<SortMode>("created_desc");
 
   const [includeTagIds, setIncludeTagIds] = useState<number[]>([]);
   const [excludeTagIds, setExcludeTagIds] = useState<number[]>([]);
@@ -120,13 +124,20 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     setTimeout(() => setRefreshing(false), 300); // brief lit-up feedback
   }
 
-  function selectSort(direction: "asc" | "desc" | null) {
-    setSortDirection(direction);
+  function selectSort(mode: SortMode) {
+    setSortMode(mode);
     setOpenDropdown(null);
   }
 
-  const sortLabel =
-    sortDirection === "asc" ? "Name A → Z" : sortDirection === "desc" ? "Name Z → A" : "Sort: Default";
+  const sortLabels: Record<SortMode, string> = {
+    name_asc: "Name A → Z",
+    name_desc: "Name Z → A",
+    created_desc: "Newest",
+    created_asc: "Oldest",
+    updated_desc: "Last updated",
+  };
+
+const sortLabel = sortLabels[sortMode];
 
   function toggleIncludeTag(tagId: number) {
     setIncludeTagIds((prev) =>
@@ -220,10 +231,20 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
         !excludeTagIds.some((id) => a.tags.some((t) => t.id === id))
     )
     .sort((a, b) => {
-      if (!sortDirection) return 0;
-      return sortDirection === "asc"
-        ? a.name.localeCompare(b.name)
-        : b.name.localeCompare(a.name);
+      switch (sortMode) {
+        case "name_asc":
+          return a.name.localeCompare(b.name);
+        case "name_desc":
+          return b.name.localeCompare(a.name);
+        case "created_asc":
+          return new Date(a.created_date).getTime() - new Date(b.created_date).getTime();
+        case "created_desc":
+          return new Date(b.created_date).getTime() - new Date(a.created_date).getTime();
+        case "updated_desc":
+          return new Date(b.updated_date).getTime() - new Date(a.updated_date).getTime();
+        default:
+          return 0;
+      }
     });
 
   function toggleExpanded(id: number) {
@@ -458,14 +479,20 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
                 visibility: panelPos ? "visible" : "hidden",
               }}
             >
-              <div style={styles.tagDropdownOption} onClick={() => selectSort(null)}>
-                Default
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("updated_desc")}>
+                Last Updated
               </div>
-              <div style={styles.tagDropdownOption} onClick={() => selectSort("asc")}>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("name_asc")}>
                 Name A → Z
               </div>
-              <div style={styles.tagDropdownOption} onClick={() => selectSort("desc")}>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("name_desc")}>
                 Name Z → A
+              </div>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("created_desc")}>
+                Newest
+              </div>
+              <div style={styles.tagDropdownOption} onClick={() => selectSort("created_asc")}>
+                Oldest
               </div>
             </div>
           )}
