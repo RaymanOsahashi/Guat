@@ -466,8 +466,8 @@ export default function SongList() {
                 {newSongError && <p style={styles.newSongError}>{newSongError}</p>}
 
                 <div style={styles.editActions}>
-                  <button style={styles.cancelButton} onClick={cancelAddSong} disabled={creatingSong}>Cancel</button>
                   <button style={styles.saveButton} onClick={saveNewSong} disabled={creatingSong}>{creatingSong ? "Saving…" : "Save"}</button>
+                  <button style={styles.cancelButton} onClick={cancelAddSong} disabled={creatingSong}>Cancel</button>
                 </div>
               </div>
             </div>
