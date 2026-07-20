@@ -644,7 +644,7 @@ const sortLabel = sortLabels[sortMode];
       )}
 
       {loading ? (
-        <p style={styles.message}>Loading activities…</p>
+        <p style={{...styles.message, color: "#ffffff"}}>Loading activities…</p>
       ) : error ? (
         <p style={{ ...styles.message, color: "#c0392b" }}>{error}</p>
       ) : activities.length === 0 ? (
