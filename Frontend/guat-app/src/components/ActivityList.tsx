@@ -22,11 +22,11 @@ interface Activity {
   tags: Tag[];
   created_date: string;
   updated_date: string
-  achived: boolean;
+  is_achived: boolean;
   starred: boolean;
 }
 
-type EditableFields = Pick<Activity, "name" | "description" | "description_spanish"> & {
+type EditableFields = Pick<Activity, "name" | "description" | "description_spanish" | "starred"> & {
   tags: Tag[];
 };
 
@@ -48,6 +48,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     description: "",
     description_spanish: "",
     tags: [],
+    starred: false,
   });
   const [createSaving, setCreateSaving] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
@@ -58,6 +59,7 @@ export default function ActivityList({ refreshKey }: ActivityListProps) {
     description: "",
     description_spanish: "",
     tags: [],
+    starred: false,
   });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -238,6 +240,9 @@ const sortLabel = sortLabels[sortMode];
         !excludeTagIds.some((id) => a.tags.some((t) => t.id === id))
     )
     .sort((a, b) => {
+      if (a.starred !== b.starred) {
+        return a.starred ? -1 : 1;
+      }
       switch (sortMode) {
         case "name_asc":
           return a.name.localeCompare(b.name);
@@ -270,7 +275,7 @@ const sortLabel = sortLabels[sortMode];
   function startCreate() {
     setCreating(true);
     setCreateError(null);
-    setCreateForm({ name: "", description: "", description_spanish: "", tags: [] });
+    setCreateForm({ name: "", description: "", description_spanish: "", tags: [], starred: false });
   }
 
   function cancelCreate() {
@@ -309,15 +314,16 @@ const sortLabel = sortLabels[sortMode];
   }
 
   function startEdit(activity: Activity) {
-    setEditingId(activity.id);
-    setSaveError(null);
-    setEditForm({
-      name: activity.name,
-      description: activity.description,
-      description_spanish: activity.description_spanish,
-      tags: activity.tags,
-    });
-  }
+  setEditingId(activity.id);
+  setSaveError(null);
+  setEditForm({
+    name: activity.name,
+    description: activity.description,
+    description_spanish: activity.description_spanish,
+    starred: activity.starred,
+    tags: activity.tags,
+  });
+}
 
   function cancelEdit() {
     setEditingId(null);
@@ -344,7 +350,7 @@ const sortLabel = sortLabels[sortMode];
         apiPatch(`${ACTIVITY_ENDPOINT}${id}/tags/`, { tags: tags.map((t) => t.id) }),
       ]);
       setActivities((prev) =>
-        prev.map((a) => (a.id === id ? { ...a, ...updated, tags } : a))
+        prev.map((a) => (a.id === id ? { ...a, ...updated, ...fields, tags } : a))
       );
       setEditingId(null);
     } catch (err) {
@@ -667,12 +673,23 @@ const sortLabel = sortLabels[sortMode];
                   }}
                   onClick={() => toggleExpanded(activity.id)}
                 >
+                  <svg
+                    style={styles.starIcon}
+                    viewBox="0 0 24 24"
+                    fill={activity.starred ? "#f5c518" : "none"}
+                    stroke={activity.starred ? "#f5c518" : "#9a9aa2"}
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <polygon points="12 2 15.09 8.63 22 9.24 16.5 13.97 18.18 21 12 17.27 5.82 21 7.5 13.97 2 9.24 8.91 8.63 12 2" />
+                  </svg>
                   <span style={styles.cardName}>{activity.name}</span>
                   {!isExpanded && <HeaderTagList tags={activity.tags} />}
                   <span
                     style={{
                       display: "inline-block",
-                      gridColumn: "3",
+                      gridColumn: "4",
                       transform: isExpanded ? "rotate(90deg)" : "rotate(0deg)",
                       transition: "transform 0.15s ease",
                       justifySelf: "end",
@@ -695,7 +712,16 @@ const sortLabel = sortLabels[sortMode];
                             }
                           />
                         </label>
-
+                        <label style={styles.starredCheckboxLabel}>
+                          <input
+                            type="checkbox"
+                            checked={editForm.starred}
+                            onChange={(e) =>
+                              setEditForm((f) => ({ ...f, starred: e.target.checked }))
+                            }
+                          />
+                          Starred
+                        </label>
                         <label style={styles.fieldLabel}>
                           Description
                           <textarea
@@ -923,7 +949,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   cardHeader: {
     display: "grid",
-    gridTemplateColumns: "1fr minmax(0, 40%) 24px",
+    gridTemplateColumns: "20px 1fr minmax(0, 40%) 24px",
     alignItems: "center",
     gap: 12,
     padding: "12px 16px",
@@ -933,11 +959,26 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     justifySelf: "start",
     textAlign: "left",
-    marginLeft: "4px",
-    minWidth: 0, // let the track shrink instead of forcing overflow
+    marginLeft: 0,
+    minWidth: 0,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap",
+  },
+  starIcon: {
+    width: 16,
+    height: 16,
+    flexShrink: 0,
+    justifySelf: "center",
+    alignSelf: "center",
+  },
+  starredCheckboxLabel: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 13,
+    color: "#c9c9d1",
+    cursor: "pointer",
   },
   tagList: {
     ...tagListBase,
